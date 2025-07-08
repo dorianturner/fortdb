@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <stdint.h>  
 #include <pthread.h>
-#include <network/threads.h>
+#include "hash.h"
 
 typedef struct VersionNode *VersionNode;
 typedef struct Cell *Cell;

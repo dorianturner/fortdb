@@ -15,13 +15,13 @@ static VersionNode version_node_new(void *value, uint64_t global_version, uint64
 }
 
 int cell_put(Cell cell, void *value, uint64_t global_version) {
-    if (!cell || !key || !value) return -1;
+    if (!cell || !value) return -1;
 
     VersionNode node = version_node_new(value, global_version, cell->size + 1);
     if (!node) return -1;
 
-    if (!cell->head) {
-        cell->head = cell->tail = node;
+    if (!cell->tail) {
+        cell->tail = node;
     } else {
         node->prev = cell->tail;
         cell->tail = node;
