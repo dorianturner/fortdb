@@ -45,51 +45,11 @@ Each record stored on disk includes both versions.
 
 ## 5. Internal Data Layout
 
-### 5.1 On‑Disk Log
 
-* Single append‑only file of fixed‑format records:
-
-  ```c
-  struct Record {
-    uint64_t global_version;
-    uint64_t local_version;
-    uint8_t  type;        // 1=SET, 2=DELETE
-    uint32_t key_len;
-    uint32_t val_len;     // zero for DELETE
-    char     key[key_len];
-    char     value[val_len];
-  };
-  ```
-
-### 5.2 In‑Memory Index
+### 5.1 In‑Memory Index
 
 A nested hashmap structure for O(1) lookups:
 
-```text
-HashMap tables;
-// tables: string → Table*
-
-struct Table {
-  pthread_rwlock_t lock;
-  HashMap rows;  // row_id → Row*
-};
-
-struct Row {
-  HashMap cols;  // column_name → Cell*
-};
-
-struct Cell {
-  uint64_t local_counter;
-  VersionNode* head;
-};
-
-struct VersionNode {
-  char* value;
-  uint64_t global_version;
-  uint64_t local_version;
-  VersionNode* prev;
-};
-```
 
 * **tables** maps table names (prefixes) to tables.
 * **rows** maps row IDs (e.g. `"1"`) to row instances.
