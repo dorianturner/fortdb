@@ -17,7 +17,6 @@ struct Record {
     uint8_t  type;        // 1=SET, 2=DELETE
     uint32_t key_len;
     uint32_t val_len;     // zero for DELETE
-    // Flexible array members must be at the end and only one allowed
     char data[]; // key and value packed here (manual offset handling required)
 };
 
@@ -28,9 +27,8 @@ struct VersionNode {
     VersionNode prev;
 };
 
-// DLL of values
+// Linked List of version nodes
 struct Cell {
-    VersionNode head;
     VersionNode tail;
     uint64_t size;
 };
@@ -45,6 +43,11 @@ struct Table {
     pthread_rwlock_t lock;
     Hashmap rows;
 };
+
+int cell_put(Cell cell, void *value, uint64_t global_version);
+void *cell_get(Cell cell, uint64_t local_version);
+void free_version_node(VersionNode node);
+void free_cell(Cell cell);
 
 #endif
 
