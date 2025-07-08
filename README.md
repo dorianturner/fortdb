@@ -50,7 +50,6 @@ Each record stored on disk includes both versions.
 
 A nested hashmap structure for O(1) lookups:
 
-
 * **tables** maps table names (prefixes) to tables.
 * **rows** maps row IDs (e.g. `"1"`) to row instances.
 * **cols** maps column names (e.g. `"name"`) to cells.
