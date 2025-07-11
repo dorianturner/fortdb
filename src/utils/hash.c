@@ -29,53 +29,67 @@ Hashmap hashmap_create(uint64_t bucket_count) {
     return map;
 }
 
-static void entry_free(Entry entry) {
+static void entry_free(Entry entry, void (*free_value)(void *)) {
     while (entry) {
         Entry next = entry->next;
+        if (free_value) free_value(entry->value);
         free(entry->key);
         free(entry);
         entry = next;
     }
 }
 
-void hashmap_free(Hashmap map) {
+
+void hashmap_free(Hashmap map, void (*free_value)(void *)) {
     if (!map) return;
-
     for (uint64_t i = 0; i < map->bucket_count; i++) {
-        entry_free(map->buckets[i]);
+        entry_free(map->buckets[i], free_value);
     }
-
     free(map->buckets);
     free(map);
 }
 
-// This is slightly wrong in how it replaces the value rather than adding a new one.
-// I cba to change it rn, but it should always be adding to the end of a linked list of 
-// The entry value linked list for append only
-int hashmap_put(Hashmap map, const char *key, void *value) {
-    if (!map || !key) return -1;
+
+// Pre: Any hashmap entries are a cell
+int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version) {
+    if (!map || !key || !value) return -1;
 
     uint64_t index = hash(key) % map->bucket_count;
     Entry current = map->buckets[index];
 
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            current->value = value;
-            return 0; // key exists, value replaced
+            return cell_put((Cell)(current->value), value, global_version);
         }
         current = current->next;
     }
 
+    // Mid: key not found
+    Cell cell = malloc(sizeof(struct Cell));
+    if (!cell) return -1;
+
+    cell->tail = NULL;
+    cell->size = 0;
+
+    if (cell_put(cell, value, global_version) != 0) {
+        free(cell);
+        return -1;
+    }
+
     Entry new_entry = malloc(sizeof(struct Entry));
-    if (!new_entry) return -1;
+    if (!new_entry) {
+        free_cell(cell);
+        return -1;
+    }
 
     new_entry->key = strdup(key);
     if (!new_entry->key) {
+        free_cell(cell);
         free(new_entry);
         return -1;
     }
 
-    new_entry->value = value;
+    new_entry->value = cell;
     new_entry->next = map->buckets[index];
     map->buckets[index] = new_entry;
     map->size++;
@@ -83,7 +97,7 @@ int hashmap_put(Hashmap map, const char *key, void *value) {
     return 0;
 }
 
-void *hashmap_get(Hashmap map, const char *key) {
+void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     if (!map || !key) return NULL;
 
     uint64_t index = hash(key) % map->bucket_count;
@@ -91,11 +105,12 @@ void *hashmap_get(Hashmap map, const char *key) {
 
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            return current->value;
+            return cell_get((Cell)(current->value), local_version);
         }
         current = current->next;
     }
 
-    return NULL; // not found
+    return NULL;
 }
+
 

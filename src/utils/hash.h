@@ -19,8 +19,8 @@ struct Hashmap {
 };
 
 Hashmap hashmap_create(uint64_t bucket_count);
-void hashmap_free(Hashmap map);
+void hashmap_free(Hashmap map, void (*free_value)(void *));
 int hashmap_put(Hashmap map, const char *key, void *value);
-void *hashmap_get(Hashmap map, const char *key);
+void *hashmap_get(Hashmap map, const char *key, uint64_t local_version);
 
 #endif

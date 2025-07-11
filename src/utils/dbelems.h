@@ -20,6 +20,7 @@ struct Record {
     char data[]; // key and value packed here (manual offset handling required)
 };
 
+// Generic store for any versioned value
 struct VersionNode {
     void *value;
     uint64_t global_version;
@@ -34,14 +35,17 @@ struct Cell {
 };
 
 // Row nums -> parameters hashmap
+// Is a "Cell" on its own which is a ll of this rows hashmap versions
 struct Row {
-    Hashmap cols;
+    Cell versions;
 };
 
 // Threaded hashmap of ROWs
+// TODO: Improve the multithreading by making it striped
+// Same gig, ll of version nodes which store its Table name -> ROWs hashmaps
 struct Table {
     pthread_rwlock_t lock;
-    Hashmap rows;
+    Cell versions; 
 };
 
 int cell_put(Cell cell, void *value, uint64_t global_version);

@@ -35,6 +35,10 @@ void *cell_get(Cell cell, uint64_t local_version) {
     if (!cell) return NULL;
 
     VersionNode current = cell->tail;
+    if (local_version == NULL) {
+        return current->value;
+    }
+
     while (current) {
         if (current->local_version <= local_version) {
             return current->value;
