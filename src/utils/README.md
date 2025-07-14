@@ -64,6 +64,10 @@ users/{userId}/orders/{orderId}/
 * **Collections** ↔ Sets of keys sharing a path prefix (e.g., `users/123/orders`).
 * **Snapshots** ↔ Selecting all entries with `version <= v` yields a consistent view across documents.
 
+A root table stores collections
+Collections store Documents
+Documents store fields, and sub collections
+
 ### 6. Caveats
 
 * **Memory Growth**: Chain length grows with each update—plan pruning strategy. Requires compaction to keep store size down.
