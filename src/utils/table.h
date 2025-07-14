@@ -1,0 +1,24 @@
+#ifndef TABLE_H
+#define TABLE_H
+
+#include <pthread.h>
+#include "hash.h"
+#include "collection.h"
+
+typedef struct Table *Table;
+
+struct Table {
+    pthread_rwlock_t lock;
+    HashMap collections;     // char* → VersionNode(Collection)
+};
+
+// Memory management
+Table table_create(void);
+void table_free(Table table);
+
+// Collection getters/setters
+Collection table_get_collection(Table table, const char *name, uint64_t local_version);
+int table_set_collection(Table table, const char *name, Collection coll, uint64_t global_version);
+
+#endif
+

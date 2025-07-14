@@ -1,0 +1,24 @@
+#ifndef COLLECTION_H
+#define COLLECTION_H
+
+#include <pthread.h>
+#include "hash.h"
+#include "document.h"
+
+typedef struct Collection *Collection;
+
+struct Collection {
+    pthread_rwlock_t lock;
+    HashMap documents;       // char* → VersionNode(Document)
+};
+
+// Memory management
+Collection collection_create(void);
+void collection_free(Collection coll);
+
+// Document getters/setters
+Document collection_get_document(Collection coll, const char *name, uint64_t local_version);
+int collection_set_document(Collection coll, const char *name, Document doc, uint64_t global_version);
+
+#endif
+
