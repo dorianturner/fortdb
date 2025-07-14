@@ -1,15 +1,14 @@
-#include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include "hash.h"
+#include "version_node.h"
 
-// https://en.wikipedia.org/wiki/Fowler%E2%80%93Noll%E2%80%93Vo_hash_function
-// FNV-1a hash
+// FNV-1a hashing, see wikipedia
 static uint64_t hash(const char *key) {
-    uint64_t hash = 14695981039346656037ULL; // Offset Basis
+    uint64_t hash = 14695981039346656037ULL;
     while (*key) {
-        hash ^= (unsigned char)(*key);
-        hash *= 1099511628211ULL; // FNV Prime
-        key++;
+        hash ^= (unsigned char)(*key++);
+        hash *= 1099511628211ULL;
     }
     return hash;
 }
@@ -29,16 +28,16 @@ Hashmap hashmap_create(uint64_t bucket_count) {
     return map;
 }
 
+// PRE: Entry values are always VersionNodes
 static void entry_free(Entry entry, void (*free_value)(void *)) {
     while (entry) {
         Entry next = entry->next;
-        if (free_value) free_value(entry->value);
+        version_node_free(entry->value, free_value);
         free(entry->key);
         free(entry);
         entry = next;
     }
 }
-
 
 void hashmap_free(Hashmap map, void (*free_value)(void *)) {
     if (!map) return;
@@ -49,9 +48,8 @@ void hashmap_free(Hashmap map, void (*free_value)(void *)) {
     free(map);
 }
 
-
-// Pre: Any hashmap entries are a cell
-int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version) {
+// PRE: Entrys contain version nodes
+int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *)) {
     if (!map || !key || !value) return -1;
 
     uint64_t index = hash(key) % map->bucket_count;
@@ -59,37 +57,34 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
 
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            return cell_put((Cell)(current->value), value, global_version);
+            VersionNode old_head = (VersionNode)current->value;
+            uint64_t local_version = old_head ? old_head->local_version + 1 : 0;
+            VersionNode new_head = version_node_create(value, global_version, local_version, old_head);
+            if (!new_head) return -1;
+            current->value = new_head;
+            return 0;
         }
         current = current->next;
     }
-
-    // Mid: key not found
-    Cell cell = malloc(sizeof(struct Cell));
-    if (!cell) return -1;
-
-    cell->tail = NULL;
-    cell->size = 0;
-
-    if (cell_put(cell, value, global_version) != 0) {
-        free(cell);
-        return -1;
-    }
+    
+    // MID: Entry with key doesn't exist
+    VersionNode new_head = version_node_create(value, global_version, 0, NULL);
+    if (!new_head) return -1;
 
     Entry new_entry = malloc(sizeof(struct Entry));
     if (!new_entry) {
-        free_cell(cell);
+        version_node_free(new_head, free_value);
         return -1;
     }
 
     new_entry->key = strdup(key);
     if (!new_entry->key) {
-        free_cell(cell);
+        version_node_free(new_head, free_value);
         free(new_entry);
         return -1;
     }
 
-    new_entry->value = cell;
+    new_entry->value = new_head;
     new_entry->next = map->buckets[index];
     map->buckets[index] = new_entry;
     map->size++;
@@ -97,6 +92,7 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
     return 0;
 }
 
+// A bit inefficient for now ig but how to make faster idk (maybe iterators)
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     if (!map || !key) return NULL;
 
@@ -105,12 +101,18 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
 
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            return cell_get((Cell)(current->value), local_version);
+            VersionNode head = (VersionNode)current->value;
+            while (head && head->local_version >= local_version) {
+                if (head->local_version == local_version) {
+                    return head->value;
+                }
+                head = head->prev;
+            }
+            return NULL;
         }
         current = current->next;
     }
 
     return NULL;
 }
-
 
