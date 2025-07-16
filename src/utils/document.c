@@ -13,7 +13,7 @@ Document document_create(void) {
     if (!doc->lock) {
         free(doc);
         return NULL;
-    };
+    }
 
     doc->fields = hashmap_create(DEFAULT_BUCKET_COUNT);
     if (!doc->fields) {
@@ -29,7 +29,7 @@ Document document_create(void) {
         free(doc);
         return NULL;
     }
-    
+
     return doc;
 }
 
@@ -44,14 +44,18 @@ void document_free(Document doc) {
 // Field getters/setters
 Field document_get_field(Document doc, const char *key, uint64_t local_version) {
    if (!doc || !key) return NULL;
+   if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
    Field field = hashmap_get(doc->fields, key, local_version);
+   pthread_rwlock_unlock(&doc->lock);
    return field;
 }
 
 // Putting a Version_Node(Field) into the hashmap
 int document_set_field(Document doc, const char *key, Field field, uint64_t global_version) {
     if (!doc || !key || !field) return -1;
+    if (pthread_rwlock_wrlock(&doc->lock) != 0) return NULL;
     hashmap_put(doc->fields, key, field, global_version, (*field_free));
+    pthread_rwlock_unlock(&doc->lock);
     return 0;
 }
 
@@ -59,12 +63,16 @@ int document_set_field(Document doc, const char *key, Field field, uint64_t glob
 // Subcollection getters/setters
 Collection document_get_subcollection(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
+    if (pthread_rwlock_wrlock(&doc->lock) != 0) return NULL;
     Field subcol = hashmap_get(doc->subcollections, key, local_version);
+    pthread_rwlock_unlock(&doc->lock);
     return subcol;
 }
 
 int document_set_subcollection(Document doc, const char *key, Collection subcoll, uint64_t global_version) {
     if (!doc || !key || !subcoll) return -1;
-    Collection subcol = hashmap_put(doc->subcollections, key, subcoll, global_version, (*collection_free));
+    if (pthread_rwlock_wrlock(&doc->lock) != 0) return -1;
+    if (hashmap_put(doc->subcollections, key, subcoll, global_version, (*collection_free)) != 0) return -1;
+    pthread_rwlock_unlock(&doc->lock);
     return 0;
 }
