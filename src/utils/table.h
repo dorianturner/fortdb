@@ -7,6 +7,7 @@
 
 typedef struct Table *Table;
 
+// Just have a root table for now
 struct Table {
     pthread_rwlock_t lock;
     HashMap collections;     // char* → VersionNode(Collection)
