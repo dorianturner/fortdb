@@ -91,6 +91,7 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
 
     return 0;
 }
+// POST: We have put an Entry(VersionNode(value)) to the right bucket
 
 // A bit inefficient for now ig but how to make faster idk (maybe iterators)
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
