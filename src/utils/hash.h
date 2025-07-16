@@ -19,7 +19,7 @@ typedef struct Hashmap {
 } Hashmap;
 
 Hashmap hashmap_create(uint64_t bucket_count);
-void hashmap_free(Hashmap map, void (*free_value)(void *));
+void hashmap_free(Hashmap map);
 int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *));
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version);
 

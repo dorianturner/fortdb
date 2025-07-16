@@ -29,20 +29,20 @@ Hashmap hashmap_create(uint64_t bucket_count) {
 }
 
 // PRE: Entry values are always VersionNodes
-static void entry_free(Entry entry, void (*free_value)(void *)) {
+static void entry_free(Entry entry) {
     while (entry) {
         Entry next = entry->next;
-        version_node_free(entry->value, free_value);
+        version_node_free(entry->value);
         free(entry->key);
         free(entry);
         entry = next;
     }
 }
 
-void hashmap_free(Hashmap map, void (*free_value)(void *)) {
+void hashmap_free(Hashmap map)(void *)) {
     if (!map) return;
     for (uint64_t i = 0; i < map->bucket_count; i++) {
-        entry_free(map->buckets[i], free_value);
+        entry_free(map->buckets[i]);
     }
     free(map->buckets);
     free(map);
