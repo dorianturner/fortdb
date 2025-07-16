@@ -10,6 +10,7 @@ typedef enum {
 } RecordType;
 
 // Append-only log record layout
+// IDK if this is needed for now
 struct Record {
     uint64_t global_version;  
     RecordType type;         

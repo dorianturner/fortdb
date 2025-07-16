@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <pthread.h>
 #include "collection.h"
 #include "common.h"
 #include "document.h"
@@ -33,7 +34,7 @@ void collection_free(Collection coll) {
 }
 
 Document collection_get_document(Collection coll, const char *key, uint64_t local_version) {
-    if (!coll || !name) return NULL;
+    if (!coll || !key) return NULL;
     if (pthread_rwlock_rdlock(&coll->lock) != 0) return NULL;
     Document doc = hashmap_get(coll->documents, key, local_version); 
     pthread_rwlock_unlock(&coll->lock);

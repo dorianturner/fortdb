@@ -1,4 +1,6 @@
 #include <pthread.h>
+#include <stdint.h>
+#include <stdlib.h>
 #include "field.h"
 #include "hash.h"
 #include "collection.h"
