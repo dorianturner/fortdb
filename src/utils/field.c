@@ -5,33 +5,33 @@
 
 Field field_create(const char *name) {
     Field field = malloc(sizeof(struct Field));
-    if (field == NULL) return NULL;
+    if (!field) return NULL;
 
-   if (pthread_rwlock_init(&field->lock, NULL) != 0) {
+    if (pthread_rwlock_init(&field->lock, NULL) != 0) {
         free(field);
         return NULL;
     }
 
-   field->name = strdup(name);
-   if (field->name == NULL) {
+    field->name = strdup(name);
+    if (!field->name) {
         pthread_rwlock_destroy(&field->lock);
         free(field);
         return NULL;
-   }
+    }
 
-   field->versions = NULL;
-   return field;
+    field->versions = NULL;
+    return field;
 }
 
-void field_free(Field field, void (*free_node_value)(void *)) {
-    if (field == NULL) return;
-    version_node_free(field->versions, free_node_value);
+void field_free(Field field) {
+    if (!field) return;
+    version_node_free(field->versions);
     pthread_rwlock_destroy(&field->lock);
     free(field->name);
     free(field);
 }
 
-int field_set(Field field, void *value, uint64_t global_version) {
+int field_set(Field field, void *value, uint64_t global_version, void (*free_value)(void *)) {
     if (field == NULL) return -1;
 
     if (pthread_rwlock_wrlock(&field->lock) != 0) {
@@ -44,11 +44,12 @@ int field_set(Field field, void *value, uint64_t global_version) {
     }
 
     VersionNode prev = field->versions;
-    VersionNode head = version_node_create(value, global_version, local_version, prev);
+    VersionNode head = version_node_create(value, global_version, local_version, prev, free_value);
     if (!head) {
         pthread_rwlock_unlock(&field->lock);
         return -1;
     }
+
     field->versions = head;
 
     pthread_rwlock_unlock(&field->lock);

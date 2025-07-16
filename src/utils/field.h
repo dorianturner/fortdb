@@ -15,10 +15,10 @@ struct Field {
 
 // Memory management
 Field field_create(const char *name);
-void field_free(Field field, void (free_node_value)(void *));
+void field_free(Field field);
 
 // Getters/setters
-int field_set(Field field, void *value, uint64_t global_version);
+int field_set(Field field, void *value, uint64_t global_version, void (*free_value)(void *));
 void *field_get(Field field, uint64_t local_version);
 
 #endif
