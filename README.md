@@ -30,14 +30,15 @@ FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 4. Supported CLI Commands
 
    ```bash
-   ./fortdb set <path> <value>        # path: table/collection/.../field
+   ./fortdb set <path> <datatype>:<value>        # path: table/collection/.../field
    ./fortdb get <path> [--v=<V>]      # read a field at version V
    ./fortdb delete <path>             # tombstone an entity
    ./fortdb list-versions <path>      # list all versions of any entity
-   ./fortdb compact                   # compact entire hierarchy to latest db version
-````
+   ./fortdb compact <path>            # compact entire hierarchy to latest db version
+   ./fortdb load <path>               # loads an existing db
+   ./fortdb save <filename> <path>    # saves to a file.fort
 
-Example: `./fortdb set users/123/posts/456/title "Hello"`
+    Example: `./fortdb set users/123/posts/456/title STRING:Hello`
 
-```
+    ```
 
