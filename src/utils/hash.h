@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 typedef struct Entry *Entry;
+typedef struct Hashmap *Hashmap;
 
 // Value is always a VersionNode
 struct Entry {
