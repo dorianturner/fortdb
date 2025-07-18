@@ -17,6 +17,7 @@ int decode_and_execute(Table root, Instr *instr) {
             );
 
         case GET:
+            // Should be a string as fields should only ever be set as strings
             return table_get_field(
                 root,
                 instr->get.path,

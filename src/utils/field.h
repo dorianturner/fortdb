@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include "version_node.h"
 
+#define DELETED ((void *)&deleted_marker)
+
 typedef struct Field *Field;
 
 struct Field {
@@ -19,6 +21,7 @@ void field_free(Field field);
 
 // Getters/setters
 int field_set(Field field, void *value, uint64_t global_version, void (*free_value)(void *));
+int field_delete(Field field, uint64_t global_version);
 void *field_get(Field field, uint64_t local_version);
 
 #endif

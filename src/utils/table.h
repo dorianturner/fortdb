@@ -16,8 +16,8 @@ struct Table {
 Table table_create(void);
 void table_free(Table table);
 
-int table_set_field(Table table, const char *path, int datatype, const char *value, uint64_t global_version);
-int table_get_field(Table table, const char *path, int version);
+int table_set_field(Table table, const char *path, const char *value, uint64_t global_version);
+void *table_get_field(Table table, const char *path, int version);
 int table_delete_path(Table table, const char *path, uint64_t global_version);
 int table_list_versions(Table table, const char *path);
 int table_compact(Table table, const char *path);

@@ -16,7 +16,7 @@ FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
    | --------------------------- | ------------------------------ | ----------------------------------------------- |
    | `load <path>`               | `load /home/me/db.fort`        | Load database from file                         |
    | `get <path> [--v=<V>]`      | `get users/john/age`           | Fetch field value (optional global version `V`) |
-   | `set <path> <type>:<value>` | `set users/john/age int:42`    | Insert or update field                          |
+   | `set <path> <value>`        | `set users/john/age 42`        | Insert or update field                          |
    | `delete <path>`             | `delete users/john/age`        | Tombstone an entity                             |
    | `list-versions <path>`      | `list-versions users/john/age` | List all versions of an entity                  |
    | `compact <path>`            | `compact users/john`           | Retain only latest versions, remove tombstones  |
@@ -41,11 +41,11 @@ fortdb> load db.fort
 Loaded database from db.fort
 fortdb> get users/alice/email
 string:alice@example.com
-fortdb> set users/alice/age int:30
+fortdb> set users/alice/age 30
 OK
 fortdb> list-versions users/alice/age
-v1: int:25
-v2: int:30
+v1: 25
+v2: 30
 fortdb> compact users/alice
 Compacted users/alice
 fortdb> save db.fort

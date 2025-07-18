@@ -6,15 +6,6 @@
 #include "parser.h"
 #include "ir.h"
 
-// Helper: string → DATA_TYPE
-static DATA_TYPE get_datatype(const char *s) {
-    if (strcmp(s, "string") == 0)  return STRING;
-    if (strcmp(s, "int") == 0)     return INT;
-    if (strcmp(s, "float") == 0)   return FLOAT;
-    if (strcmp(s, "boolean") == 0) return BOOLEAN;
-    return -1;
-}
-
 Instr parse_args(int argc, char *args[], uint64_t global_version) {
     if (argc < 1) return NULL;
 
@@ -28,30 +19,21 @@ Instr parse_args(int argc, char *args[], uint64_t global_version) {
     else if (strcmp(args[0], "save") == 0)           op = SAVE;
     else return NULL;
 
-    // 2) Allocate instruction
     Instr instr = malloc(sizeof *instr);
     if (!instr) return NULL;
     instr->instr_type = op;
     instr->global_version = global_version;
 
-    // 3) Parse ops into instructions 
     switch (op) {
       case SET:
         if (argc != 3) { free(instr); return NULL; }
-        instr->set.path  = args[1];
-        {
-          char *type_tok = strtok(args[2], ":");
-          char *val_tok  = strtok(NULL,    ":");
-          DATA_TYPE dt = get_datatype(type_tok);
-          if (dt < 0 || !val_tok) { free(instr); return NULL; }
-          instr->set.type  = dt;
-          instr->set.value = val_tok;
-        }
+        instr->set.path = args[1];
+        instr->set.value = args[2]; // Interpret all data as a string
         break;
 
       case GET:
         if (argc < 2 || argc > 3) { free(instr); return NULL; }
-        instr->get.path    = args[1];
+        instr->get.path = args[1];
         instr->get.version = -1;
         if (argc == 3 && strncmp(args[2], "--v=", 4) == 0)
             instr->get.version = atoi(args[2] + 4);
@@ -80,10 +62,11 @@ Instr parse_args(int argc, char *args[], uint64_t global_version) {
       case SAVE:
         if (argc != 3) { free(instr); return NULL; }
         instr->save.filename = args[1];
-        instr->save.path     = args[2];
+        instr->save.path = args[2];
         break;
-    
+
       default:
+        free(instr);
         return NULL;
     }
 

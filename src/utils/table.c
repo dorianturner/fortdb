@@ -93,3 +93,29 @@ static Field resolve_path(Table table, const char *path, uint64_t global_version
     return field;
 }
 
+int table_set_field(Table table, const char *path, const char *value, uint64_t global_version) {
+    if (!table || !path || !value) return -1;
+
+    Field field = resolve_path(table, path, global_version);
+    if (!field) return -1;
+
+    char *copy = strdup(value);
+    if (!copy) return -1;
+
+    return field_set(field, copy, global_version, free);
+}
+
+void *table_get_field(Table table, const char *path, uint64_t version) {
+    if (!table || !path) return NULL;
+
+    pthread_rwlock_rdlock(&table->lock);
+    Field field = resolve_path(table, path, version);
+    if (!field) {
+        pthread_rwlock_unlock(&table->lock);
+        return NULL;
+    }
+    void *value = field_get(field, version);
+    pthread_rwlock_unlock(&table->lock);
+    return value;
+}
+

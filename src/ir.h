@@ -13,6 +13,7 @@ typedef enum {
     SAVE
 } INSTR_TYPE;
 
+// depracated
 typedef enum {
     STRING,
     INT,
@@ -27,7 +28,7 @@ typedef struct Instr {
         struct {
             char *value;
             const char *path;
-            DATA_TYPE type;
+            // DATA_TYPE type;
         } set;
         struct {
             char *key;

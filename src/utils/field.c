@@ -66,8 +66,10 @@ void *field_get(Field field, uint64_t local_version) {
     VersionNode curr = field->versions;
     while (curr != NULL && curr->local_version >= local_version) {
         if (curr->local_version == local_version) {
+            void *val = curr->value;
             pthread_rwlock_unlock(&field->lock);
-            return curr->value;
+            if (val == DELETED) return NULL;
+            return val;
         }
         curr = curr->prev;
     }
@@ -76,3 +78,6 @@ void *field_get(Field field, uint64_t local_version) {
     return NULL;
 }
 
+int field_delete(Field field, uint64_t global_version) {
+    return field_set(field, DELETED, global_version, NULL);
+}
