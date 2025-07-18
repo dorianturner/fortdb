@@ -1,44 +1,59 @@
 FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 
-1. Problem We Solve
+**Interactive Shell Usage**
 
-   Traditional DBs overwrite in place. Crashes mid‑write corrupt data, requiring complex recovery (WALs, undo logs, etc.).
-
-   FortDB’s solution: never overwrite—append every change to a log. All entities (tables, collections, documents, fields) are versioned, making writes atomic, crash‑safe, and time‑travelable.
-
-2. Core Features
-
-   - **Append‑only writes**: Every SET/DELETE appends a record; no in‑place updates.
-   - **Full hierarchical versioning**:  
-     • Tables → VersionNode chain  
-     • Collections → VersionNode chain  
-     • Documents → VersionNode chain  
-     • Fields → VersionNode chain  
-   - **Global versioning**: DB‑wide counter increments on each write.
-   - **Local versioning**: Each entity’s own counter increments per update.
-   - **Tombstone deletions**: DELETE appends a tombstone; cleaned up in compaction.
-   - **Time‑travel reads**: Query any global version V on any entity.
-   - **Atomic compaction**: Background compaction writes live versions to new file, then atomically swaps.
-   - **Thread‑safe multi‑user**: RW‑locks at Table and Collection levels; global mutex for version counter.
-
-3. Versioning Model
-
-   - **Global version** (`uint64_t`): increments per SET/DELETE, tags every record.
-   - **Local version** (`uint64_t`): per‑entity counter for quick local history.
-   - **VersionNode**: generic struct `{ value, global_version, local_version, prev }` used for tables, collections, documents, fields.
-
-4. Supported CLI Commands
+1. **Start FortDB**
 
    ```bash
-   ./fortdb set <path> <datatype>:<value>        # path: table/collection/.../field
-   ./fortdb get <path> [--v=<V>]      # read a field at version V
-   ./fortdb delete <path>             # tombstone an entity
-   ./fortdb list-versions <path>      # list all versions of any entity
-   ./fortdb compact <path>            # compact entire hierarchy to latest db version
-   ./fortdb load <path>               # loads an existing db
-   ./fortdb save <filename> <path>    # saves to a file.fort
+   $ ./fortdb
+   fortdb started. Type 'exit' or 'quit' to quit.
+   fortdb>
+   ```
 
-    Example: `./fortdb set users/123/posts/456/title STRING:Hello`
+2. **Supported Commands**
 
-    ```
+   | Command                     | Example                        | Description                                     |
+   | --------------------------- | ------------------------------ | ----------------------------------------------- |
+   | `load <path>`               | `load /home/me/db.fort`        | Load database from file                         |
+   | `get <path> [--v=<V>]`      | `get users/john/age`           | Fetch field value (optional global version `V`) |
+   | `set <path> <type>:<value>` | `set users/john/age int:42`    | Insert or update field                          |
+   | `delete <path>`             | `delete users/john/age`        | Tombstone an entity                             |
+   | `list-versions <path>`      | `list-versions users/john/age` | List all versions of an entity                  |
+   | `compact <path>`            | `compact users/john`           | Retain only latest versions, remove tombstones  |
+   | `save <path>`               | `save /home/me/db.fort`        | Save current in-memory DB to file               |
+   | `exit` or `quit`            | `exit`                         | Exit the interactive shell                      |
+
+3. **Key Features**
+
+* **Append-only writes**: SET/DELETE always append; no in-place updates, ensuring crash safety.
+* **Hierarchical versioning**: VersionNode chains at Table, Collection, Document, and Field levels.
+* **Global & local versions**: `uint64_t` counters track DB-wide and per-entity changes.
+* **Time-travel reads**: Query any historical state with `--v` flag.
+* **Atomic compaction**: Background process compacts data and swaps files atomically.
+* **Thread-safe**: RW-locks on structures and global mutex for version counter.
+
+4. **Example Session**
+
+```bash
+$ ./fortdb
+fortdb started. Type 'exit' or 'quit' to quit.
+fortdb> load db.fort
+Loaded database from db.fort
+fortdb> get users/alice/email
+string:alice@example.com
+fortdb> set users/alice/age int:30
+OK
+fortdb> list-versions users/alice/age
+v1: int:25
+v2: int:30
+fortdb> compact users/alice
+Compacted users/alice
+fortdb> save db.fort
+Saved database to db.fort
+fortdb> exit
+```
+
+5. **Getting Help**
+
+Type `help` or `?` at the prompt for command summaries.
 
