@@ -1,6 +1,8 @@
 #ifndef IR_H
 #define IR_H
 
+#include <stdint.h>
+
 typedef enum {
     SET,
     GET,
@@ -18,32 +20,35 @@ typedef enum {
     BOOLEAN
 } DATA_TYPE;
 
-typedef struct Instruction {
+typedef struct Instr {
     INSTR_TYPE instr_type;
-    const char *path;
+    uint64_t global_version;
     union {
         struct {
             char *value;
+            const char *path;
             DATA_TYPE type;
         } set;
         struct {
             char *key;
+            const char *path;
             int version;
         } get;
         struct {
-            int dummy;
+            const char *path;
         } delete;
         struct {
-            int dummy;
+            const char *path;
         } versions;
         struct {
-            int dummy;
+            const char *path;
         } compact;
         struct {
-            int dummy;
+            const char *path;
         } load;
         struct {
             char *filename;
+            const char *path;
         } save;
     };
 } Instruction;

@@ -2,24 +2,27 @@
 #define TABLE_H
 
 #include <pthread.h>
+#include <stdint.h>
 #include "hash.h"
 #include "collection.h"
 
 typedef struct Table *Table;
 
-// Just have a root table for now
 struct Table {
     pthread_rwlock_t lock;
-    HashMap collections;     // char* → Entry(VersionNode(Collection))
+    HashMap collections;
 };
 
-// Memory management
 Table table_create(void);
 void table_free(Table table);
 
-// Collection getters/setters
-Collection table_get_collection(Table table, const char *key, uint64_t local_version);
-int table_set_collection(Table table, const char *key, Collection coll, uint64_t global_version);
+int table_set_field(Table table, const char *path, int datatype, const char *value);
+int table_get_field(Table table, const char *path, int version);
+int table_delete_path(Table table, const char *path);
+int table_list_versions(Table table, const char *path);
+int table_compact(Table table, const char *path);
+int table_load(Table table, const char *filepath);
+int table_save(Table table, const char *filename, const char *path);
 
 #endif
 
