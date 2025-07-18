@@ -19,7 +19,8 @@ int main(void) {
     printf("fortdb started. Type 'exit' to quit.\n");
 
     char input[INPUT_BUFFER_SIZE];
-    
+    uint64_t global_version = 0;
+
     while (1) {
         // Fetch
         printf("fortdb> ");
@@ -38,7 +39,7 @@ int main(void) {
 
         if (argc == 0) continue;
         // Parse and Tokenise instructions
-        Instr instr = parse_args(argc, args);
+        Instr instr = parse_args(argc, args, global_version);
         if (!instr) {
             fprintf(stderr, "Invalid command or arguments.\n");
             continue;
@@ -49,7 +50,8 @@ int main(void) {
         if (status != 0) {
             fprintf(stderr, "Error executing command.\n");
         }
-        
+
+        global_version++;
     }
 
     table_free(root);

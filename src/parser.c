@@ -15,7 +15,7 @@ static DATA_TYPE get_datatype(const char *s) {
     return -1;
 }
 
-Instr parse_args(int argc, char *args[]) {
+Instr parse_args(int argc, char *args[], uint64_t global_version) {
     if (argc < 1) return NULL;
 
     INSTR_TYPE op;
@@ -32,6 +32,7 @@ Instr parse_args(int argc, char *args[]) {
     Instr instr = malloc(sizeof *instr);
     if (!instr) return NULL;
     instr->instr_type = op;
+    instr->global_version = global_version;
 
     // 3) Parse ops into instructions 
     switch (op) {
