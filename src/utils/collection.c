@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdint.h>
 #include <pthread.h>
@@ -5,16 +6,18 @@
 #include "common.h"
 #include "document.h"
 
+#define DEFAULT_BUCKET_COUNT 16
+
 // Memory management
 Collection collection_create(void) {
     Collection collection = malloc(sizeof(struct Collection));
     if (!collection) return NULL;
 
-    pthread_rwlock_init(&collection->lock, NULL);
-    if (!collection->lock) {
+    if (pthread_rwlock_init(&collection->lock, NULL) != 0) {
         free(collection);
         return NULL;
     }
+
 
     collection->documents = hashmap_create(DEFAULT_BUCKET_COUNT); 
     if (!collection->documents) {
@@ -44,7 +47,7 @@ Document collection_get_document(Collection coll, const char *key, uint64_t loca
 int collection_set_document(Collection coll, const char *key, Document doc, uint64_t global_version) {
     if (!coll || !key || !doc) return -1;
     if (pthread_rwlock_rdlock(&coll->lock) != 0) return -1;
-    if (hashmap_put(coll->documents, key, doc, global_version, (*document_free)) != 0) return -1;
+    if (hashmap_put(coll->documents, key, doc, global_version, (void (*)(void *))document_free) != 0) return -1;
     pthread_rwlock_unlock(&coll->lock);
     return 0;
 }

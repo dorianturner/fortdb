@@ -5,11 +5,12 @@
 #include "hash.h"
 #include "document.h"
 
+struct Collection;
 typedef struct Collection *Collection;
 
 struct Collection {
     pthread_rwlock_t lock;
-    HashMap documents;       // char* → Entry(VersionNode(Document))
+    Hashmap documents;       // char* → Entry(VersionNode(Document))
 };
 
 // Memory management

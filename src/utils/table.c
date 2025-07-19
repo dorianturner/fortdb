@@ -1,5 +1,7 @@
-#include <stdlib.h>
+#define _GNU_SOURCE
 #include <string.h>
+
+#include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
 #include "table.h"
@@ -9,23 +11,20 @@
 #include "version_node.h"
 
 #define MAX_PATH_LEN 128
+#define DEFAULT_BUCKET_COUNT 16
 
 // Memory management
 Table table_create(void) {
     Table t = malloc(sizeof *t);
     if (!t) return NULL;
     pthread_rwlock_init(&t->lock, NULL);
-    t->collections = hashmap_create();
+    t->collections = hashmap_create(DEFAULT_BUCKET_COUNT);
     return t;
 }
 
 void table_free(Table table) {
     if (!table) return;
     pthread_rwlock_wrlock(&table->lock);
-    HashMapIterator it = hashmap_iterator(table->collections);
-    while (hashmap_next(&it)) {
-        version_node_free((VersionNode)it.value);
-    }
     hashmap_free(table->collections);
     pthread_rwlock_unlock(&table->lock);
     pthread_rwlock_destroy(&table->lock);
@@ -120,17 +119,17 @@ void *table_get_field(Table table, const char *path, uint64_t version) {
 }
 
 int table_delete_path(Table table, const char *path, uint64_t global_version) {
-    if (!table || !path) return NULL;
+    if (!table || !path) return -1;
 
     pthread_rwlock_rdlock(&table->lock);
-    Field field = resolve_path(table, path, version);
+    Field field = resolve_path(table, path, global_version);
     if (!field) {
         pthread_rwlock_unlock(&table->lock);
-        return NULL;
+        return -1;
     }
     int deleted = field_delete(field, global_version);
     pthread_rwlock_unlock(&table->lock);
-    return value;
+    return deleted;
 }
 
 

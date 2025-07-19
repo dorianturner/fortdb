@@ -1,26 +1,20 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c17 -I./src -I./src/utils -pthread -D_POSIX_C_SOURCE=200112L
+CFLAGS = -Wall -Wextra -std=c11 -I. -Iutils -pthread
 LDFLAGS = -pthread
-SRC = $(wildcard src/*.c src/utils/*.c)
+SRC = fortdb.c parser.c decode_and_execute.c \
+      utils/document.c utils/collection.c  utils/field.c \
+      utils/hash.c utils/table.c utils/version_node.c
 OBJ = $(SRC:.c=.o)
-EXE = fortdb_test
+TARGET = fortdb
 
-.PHONY: check-syntax clean syntax-check link-check
+all: $(TARGET)
 
-check-syntax: syntax-check link-check
+$(TARGET): $(OBJ)
+	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
-syntax-check:
-	@echo "Checking syntax for all source files..."
-	@for file in $(SRC); do \
-		echo "Checking $$file..."; \
-		$(CC) $(CFLAGS) -fsyntax-only $$file || exit 1; \
-	done
-
-link-check:
-	@echo "Checking linking all files..."
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXE) $(SRC)
-	@echo "Linking OK"
+%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(EXE) $(OBJ)
+	rm -f $(OBJ) $(TARGET)
 

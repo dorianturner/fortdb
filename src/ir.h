@@ -21,7 +21,8 @@ typedef enum {
     BOOLEAN
 } DATA_TYPE;
 
-typedef struct Instr {
+typedef struct Instr *Instr;
+struct Instr {
     INSTR_TYPE instr_type;
     uint64_t global_version;
     union {
@@ -52,7 +53,7 @@ typedef struct Instr {
             const char *path;
         } save;
     };
-} Instruction;
+};
 
 #endif
 

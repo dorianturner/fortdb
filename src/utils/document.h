@@ -1,17 +1,23 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
+
+#define _GNU_SOURCE
+#include <stdint.h>
 #include <pthread.h>
 #include "field.h"
 #include "hash.h"
 #include "collection.h"
 
+struct Collection;
+typedef struct Collection *Collection;
+
 typedef struct Document *Document;
 
 struct Document {
     pthread_rwlock_t lock;
-    HashMap fields;          // char* → Entry(VersionNode(Field))
-    HashMap subcollections;  // char* → Entry(VersionNode(Collection))
+    Hashmap fields;          // char* → Entry(VersionNode(Field))
+    Hashmap subcollections;  // char* → Entry(VersionNode(Collection))
 };
 
 // Memory management

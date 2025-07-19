@@ -46,9 +46,9 @@ int main(void) {
         }
         
         // Decode and execute
-        int status = decode_and_execute(root, instr);
-        if (status != 0) {
-            fprintf(stderr, "Error executing command.\n");
+        void *status = decode_and_execute(root, instr);
+        if (status != NULL) {
+            printf("%s",field_get(status, NULL)->value);
         }
 
         global_version++;

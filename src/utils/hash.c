@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
 #include "hash.h"
@@ -39,7 +40,7 @@ static void entry_free(Entry entry) {
     }
 }
 
-void hashmap_free(Hashmap map)(void *)) {
+void hashmap_free(Hashmap map) {
     if (!map) return;
     for (uint64_t i = 0; i < map->bucket_count; i++) {
         entry_free(map->buckets[i]);
@@ -59,7 +60,7 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
         if (strcmp(current->key, key) == 0) {
             VersionNode old_head = (VersionNode)current->value;
             uint64_t local_version = old_head ? old_head->local_version + 1 : 0;
-            VersionNode new_head = version_node_create(value, global_version, local_version, old_head);
+            VersionNode new_head = version_node_create(value, global_version, local_version, old_head, free_value);
             if (!new_head) return -1;
             current->value = new_head;
             return 0;
@@ -68,18 +69,18 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
     }
     
     // MID: Entry with key doesn't exist
-    VersionNode new_head = version_node_create(value, global_version, 0, NULL);
+    VersionNode new_head = version_node_create(value, global_version, 0, NULL, free_value);
     if (!new_head) return -1;
 
     Entry new_entry = malloc(sizeof(struct Entry));
     if (!new_entry) {
-        version_node_free(new_head, free_value);
+        version_node_free(new_head);
         return -1;
     }
 
     new_entry->key = strdup(key);
     if (!new_entry->key) {
-        version_node_free(new_head, free_value);
+        version_node_free(new_head);
         free(new_entry);
         return -1;
     }
