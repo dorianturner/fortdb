@@ -61,7 +61,6 @@ int document_set_field(Document doc, const char *key, Field field, uint64_t glob
     return 0;
 }
 
-
 // Subcollection getters/setters
 Collection document_get_subcollection(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
