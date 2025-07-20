@@ -4,6 +4,6 @@
 #include "ir.h"
 #include "table.h"
 
-void *decode_and_execute(Table root, Instr instr);
+int decode_and_execute(Table root, Instr instr);
 
 #endif

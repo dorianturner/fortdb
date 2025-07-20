@@ -3,8 +3,8 @@
 #include "ir.h"
 #include "table.h"
 
-void *decode_and_execute(Table root, Instr instr) {
-    if (!instr) return NULL;
+int decode_and_execute(Table root, Instr instr) {
+    if (!instr) return -1;
 
     int ret;
 
@@ -18,17 +18,22 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_set_field: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;  // or just return NULL since success is 0?
+            return ret;
 
-        case GET:
-            // Returns pointer, just return it
-            return table_get_field(
+        case GET: {
+            void *result = table_get_field(
                 root,
                 instr->get.path,
                 instr->get.version
             );
+            if (result) {
+                printf("%s\n", (char *)result);
+            } else {
+                fprintf(stderr, "Value not found.\n");
+            }
+            return 0;
+        }
 
         case DELETE:
             ret = table_delete_path(
@@ -38,9 +43,8 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_delete_path: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;
+            return ret;
 
         case VERSIONS:
             ret = table_list_versions(
@@ -49,9 +53,8 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_list_versions: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;
+            return ret;
 
         case COMPACT:
             ret = table_compact(
@@ -60,9 +63,8 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_compact: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;
+            return ret;
 
         case LOAD:
             ret = table_load(
@@ -71,9 +73,8 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_load: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;
+            return ret;
 
         case SAVE:
             ret = table_save(
@@ -83,13 +84,12 @@ void *decode_and_execute(Table root, Instr instr) {
             );
             if (ret != 0) {
                 fprintf(stderr, "Error in table_save: %d\n", ret);
-                return NULL;
             }
-            return (void *)(intptr_t)ret;
+            return ret;
 
         default:
             fprintf(stderr, "Unknown instruction type.\n");
-            return NULL;
+            return -1;
     }
 }
 

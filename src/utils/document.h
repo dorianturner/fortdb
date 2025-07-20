@@ -1,8 +1,6 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
-
-#define _GNU_SOURCE
 #include <stdint.h>
 #include <pthread.h>
 #include "field.h"

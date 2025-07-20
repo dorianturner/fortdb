@@ -1,7 +1,6 @@
 #ifndef FIELD_H
 #define FIELD_H
 
-#define _GNU_SOURCE
 #include <stdint.h>
 #include <pthread.h>
 #include "version_node.h"

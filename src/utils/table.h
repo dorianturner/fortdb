@@ -1,7 +1,6 @@
 #ifndef TABLE_H
 #define TABLE_H
 
-#define _GNU_SOURCE
 #include <pthread.h>
 #include <stdint.h>
 #include <string.h>
