@@ -11,16 +11,18 @@
       in {
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
+            stdenv.cc
             libgcc
             gnumake
             valgrind
             gdb
 
+            pkg-config
+
             man-pages
             man-pages-posix
 
             glm
-            glibc
           ];
 
           shellHook = ''

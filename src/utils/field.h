@@ -1,8 +1,8 @@
 #ifndef FIELD_H
 #define FIELD_H
 
-#include <stdint.h>
 #include <pthread.h>
+#include <stdint.h>
 #include "version_node.h"
 
 #define DELETED ((void *)&deleted_marker)

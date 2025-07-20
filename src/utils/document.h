@@ -1,8 +1,8 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
-#include <stdint.h>
 #include <pthread.h>
+#include <stdint.h>
 #include "field.h"
 #include "hash.h"
 #include "collection.h"
