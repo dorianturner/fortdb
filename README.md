@@ -1,5 +1,7 @@
 FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 
+** This is a WORK IN PROGRESS and is currently buggy etc. etc.**
+
 **Interactive Shell Usage**
 
 1. **Start FortDB**
