@@ -20,6 +20,7 @@
             man-pages-posix
 
             glm
+            glibc
           ];
 
           shellHook = ''
