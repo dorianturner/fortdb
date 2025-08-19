@@ -41,19 +41,85 @@ Document document_create(void) {
 
 void document_free(Document doc) {
     if (!doc) return;
-    hashmap_free(doc->fields);
-    hashmap_free(doc->subdocuments);  // recursively frees subdocuments
+    hashmap_free(doc->fields);        // frees Field objects via their free callback
+    hashmap_free(doc->subdocuments);  // frees subdocuments recursively via document_free callback
     pthread_rwlock_destroy(&doc->lock);
     free(doc);
 }
 
-// Field getters/setters
-Field document_get_field(Document doc, const char *key, uint64_t local_version) {
-    if (!doc || !key) return NULL;
-    if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
-    Field field = hashmap_get(doc->fields, key, local_version);
-    pthread_rwlock_unlock(&doc->lock);
-    return field;
+/* ---------- helpers for path traversal ---------- */
+
+static int resolve_parent_and_key(Document root,
+                                  const char *path,
+                                  Document *out_parent,
+                                  char **out_key,
+                                  int create_missing,
+                                  uint64_t global_version)
+{
+    if (!root || !path || !out_parent || !out_key) return -1;
+
+    char *tmp = strdup(path);
+    if (!tmp) return -1;
+
+    char *saveptr = NULL;
+    char *token = strtok_r(tmp, "/", &saveptr);
+    if (!token) { free(tmp); return -1; }
+
+    Document current = root;
+    char *next = NULL;
+    while (1) {
+        next = strtok_r(NULL, "/", &saveptr);
+        if (next == NULL) {
+            /* token is the final component */
+            *out_parent = current;
+            *out_key = strdup(token);
+            free(tmp);
+            if (!*out_key) return -1;
+            return 0;
+        }
+
+        /* token is an intermediate component: ensure subdocument exists (or resolve it) */
+        Document child = document_get_subdocument(current, token, 0);
+        if (!child && create_missing) {
+            child = document_create();
+            if (!child) { free(tmp); return -1; }
+            if (document_set_subdocument(current, token, child, global_version) != 0) {
+                document_free(child);
+                free(tmp);
+                return -1;
+            }
+        }
+        if (!child) {
+            /* missing and not creating */
+            free(tmp);
+            return -1;
+        }
+        current = child;
+        token = next;
+    }
+}
+
+/* ---------- field get / set (path-aware) ---------- */
+
+Field document_get_field(Document doc, const char *key_or_path, uint64_t local_version) {
+    if (!doc || !key_or_path) return NULL;
+
+    Document parent = NULL;
+    char *final_key = NULL;
+    if (resolve_parent_and_key(doc, key_or_path, &parent, &final_key, 0, 0) != 0) {
+        return NULL;
+    }
+
+    if (!parent) { free(final_key); return NULL; }
+
+    if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        free(final_key);
+        return NULL;
+    }
+    Field f = hashmap_get(parent->fields, final_key, local_version);
+    pthread_rwlock_unlock(&parent->lock);
+    free(final_key);
+    return f;
 }
 
 int document_set_field(Document doc, const char *key, Field field, uint64_t global_version) {
@@ -64,7 +130,6 @@ int document_set_field(Document doc, const char *key, Field field, uint64_t glob
     return rc;
 }
 
-// Convenience: set a C-string directly (allocates and wraps into a Field)
 int document_set_field_cstr(Document doc, const char *key, const char *value, uint64_t global_version) {
     if (!doc || !key || !value) return -1;
 
@@ -90,14 +155,29 @@ int document_set_field_cstr(Document doc, const char *key, const char *value, ui
     int rc = hashmap_put(doc->fields, key, f, global_version, (void (*)(void *))field_free);
     pthread_rwlock_unlock(&doc->lock);
     if (rc != 0) {
-        /* hashmap_put failed, field_free already registered as free callback would not be called */
         field_free(f);
         return -1;
     }
     return 0;
 }
 
-// Subdocument getters/setters
+int document_set_field_path(Document root, const char *path, const char *value, uint64_t global_version) {
+    if (!root || !path || !value) return -1;
+
+    Document parent = NULL;
+    char *final_key = NULL;
+    if (resolve_parent_and_key(root, path, &parent, &final_key, 1, global_version) != 0) {
+        return -1;
+    }
+    if (!parent || !final_key) { free(final_key); return -1; }
+
+    int rc = document_set_field_cstr(parent, final_key, value, global_version);
+    free(final_key);
+    return rc;
+}
+
+/* ---------- subdocument get/set (immediate only) ---------- */
+
 Document document_get_subdocument(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
     if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
@@ -114,46 +194,103 @@ int document_set_subdocument(Document doc, const char *key, Document subdoc, uin
     return rc;
 }
 
-/* ---------- Path / admin helpers (minimal implementations) ---------- */
+/* ---------- delete / admin helpers ---------- */
 
-/* For now we treat `path` as a top-level key only (no dotted paths). */
 int document_delete_path(Document doc, const char *path, uint64_t global_version) {
     if (!doc || !path) return -1;
-    if (pthread_rwlock_rdlock(&doc->lock) != 0) return -1;
-    Field f = hashmap_get(doc->fields, path, /*local_version*/ 0);
-    pthread_rwlock_unlock(&doc->lock);
-    if (!f) {
+
+    Document parent = NULL;
+    char *final_key = NULL;
+    if (resolve_parent_and_key(doc, path, &parent, &final_key, 0, 0) != 0) {
         /* nothing to delete */
         return 0;
     }
-    /* Add a deleted tombstone version to the field */
-    return field_delete(f, global_version);
+    if (!parent || !final_key) { free(final_key); return -1; }
+
+    if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        free(final_key);
+        return -1;
+    }
+    Field f = hashmap_get(parent->fields, final_key, 0);
+    pthread_rwlock_unlock(&parent->lock);
+
+    if (!f) {
+        free(final_key);
+        return 0; /* nothing to delete */
+    }
+
+    int rc = field_delete(f, global_version);
+    free(final_key);
+    return rc;
 }
 
-/* List versions stub: you can expand to iterate VersionNode chain */
+/*
+ * List versions for a field at `path`.
+ * Prints lines like:
+ *   v1: <value>
+ *   v2: <value>
+ *
+ * Note: this helper assumes values are printable C-strings for CLI convenience.
+ */
 int document_list_versions(Document doc, const char *path) {
-    (void)doc; (void)path;
-    fprintf(stderr, "document_list_versions: not implemented (stub)\n");
+    if (!doc || !path) return -1;
+
+    Document parent = NULL;
+    char *final_key = NULL;
+    if (resolve_parent_and_key(doc, path, &parent, &final_key, 0, 0) != 0) {
+        fprintf(stderr, "document_list_versions: path not found: %s\n", path);
+        return -1;
+    }
+
+    if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        free(final_key);
+        return -1;
+    }
+    Field f = hashmap_get(parent->fields, final_key, 0);
+    pthread_rwlock_unlock(&parent->lock);
+
+    if (!f) {
+        fprintf(stderr, "document_list_versions: field not found: %s\n", path);
+        free(final_key);
+        return -1;
+    }
+
+    if (pthread_rwlock_rdlock(&f->lock) != 0) {
+        free(final_key);
+        return -1;
+    }
+    VersionNode curr = f->versions;
+    while (curr) {
+        /* print 1-based "v1, v2" numbering and a space after colon to match README/tests */
+        if (curr->value == DELETED) {
+            printf("v%llu: <deleted>\n", (unsigned long long)(curr->local_version + 1));
+        } else {
+            char *s = (char *)curr->value;
+            if (s) printf("v%llu: %s\n", (unsigned long long)(curr->local_version + 1), s);
+            else printf("v%llu: <nil>\n", (unsigned long long)(curr->local_version + 1));
+        }
+        curr = curr->prev;
+    }
+    pthread_rwlock_unlock(&f->lock);
+
+    free(final_key);
     return 0;
 }
 
-/* Compact stub: no-op for now */
+/* Compact stub (no-op for now). */
 int document_compact(Document doc, const char *path) {
     (void)doc; (void)path;
-    /* Implement compaction of version chains if desired. */
     return 0;
 }
 
-/* load/save stubs. they should (in the future) load/save subtree at `path`. */
+/* load/save stubs: do not print here; decode_and_execute prints a single message. */
 int document_load(Document doc, const char *path) {
     (void)doc; (void)path;
-    fprintf(stderr, "document_load: not implemented (stub)\n");
     return 0;
 }
 
 int document_save(Document doc, const char *filename, const char *path) {
     (void)doc; (void)filename; (void)path;
-    fprintf(stderr, "document_save: not implemented (stub)\n");
     return 0;
 }
 

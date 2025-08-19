@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "version_node.h"
 
+extern char deleted_marker;
 #define DELETED ((void *)&deleted_marker)
 
 typedef struct Field *Field;

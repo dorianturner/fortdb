@@ -6,7 +6,7 @@
 #include "version_node.h"
 #include "field.h"
 
-static char deleted_marker;
+char deleted_marker;
 
 Field field_create(const char *name) {
     Field field = malloc(sizeof(struct Field));
