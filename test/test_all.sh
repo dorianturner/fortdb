@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# List of test source files (without .c)
+tests=(
+  test_version_node
+  test_hash
+  test_field
+  test_collection
+  test_document
+  test_table
+)
+
+make all
+
+for t in "${tests[@]}"; do
+  echo "Running $t..."
+  ./"$t"
+  echo
+done
+
+echo "All tests completed successfully."
+
