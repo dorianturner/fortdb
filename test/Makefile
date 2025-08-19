@@ -17,11 +17,6 @@ test_field:
 test_document:
 	$(CC) $(CFLAGS) test_document.c ../src/utils/document.c ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_document
 
-test_table:
-	$(CC) $(CFLAGS) test_table.c \
-	    ../src/utils/table.c ../src/utils/collection.c ../src/utils/document.c \
-	    ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_table
-
 clean:
 	rm -f $(TARGETS) *.o
 

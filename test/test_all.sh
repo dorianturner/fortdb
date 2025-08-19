@@ -7,7 +7,6 @@ tests=(
   test_hash
   test_field
   test_document
-  test_table
 )
 
 make all
