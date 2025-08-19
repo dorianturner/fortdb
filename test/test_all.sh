@@ -7,6 +7,7 @@ tests=(
   test_hash
   test_field
   test_document
+  test_database
 )
 
 make all
