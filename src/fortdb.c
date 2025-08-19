@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "table.h"
+#include "document.h"
 #include "ir.h"
 #include "parser.h"
 #include "decode_and_execute.h"
@@ -10,7 +10,7 @@
 #define MAX_ARGS 32
 
 int main(void) {
-    Table root = table_create();
+    Document root = document_create();
     if (!root) {
         fprintf(stderr, "Failed to initialize database.\n");
         return 1;
@@ -22,7 +22,6 @@ int main(void) {
     uint64_t global_version = 0;
 
     while (1) {
-        // Fetch
         printf("fortdb> ");
         if (!fgets(input, sizeof(input), stdin)) break;
         input[strcspn(input, "\n")] = '\0';
@@ -38,7 +37,8 @@ int main(void) {
         }
 
         if (argc == 0) continue;
-        // Parse and Tokenise instructions
+
+        // Parse arguments into instruction
         Instr instr = parse_args(argc, args, global_version);
         if (!instr) {
             fprintf(stderr, "Invalid command or arguments.\n");
@@ -48,13 +48,13 @@ int main(void) {
         // Decode and execute
         int status = decode_and_execute(root, instr);
         if (status != 0) {
-            fprintf(stderr, "Error decoding and executing Instr");
+            fprintf(stderr, "Error decoding and executing instruction.\n");
         }
 
         global_version++;
     }
 
-    table_free(root);
+    document_free(root);
     return 0;
 }
 

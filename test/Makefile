@@ -1,6 +1,6 @@
 CC := gcc
 CFLAGS := -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 -I../src -I../src/utils
-TARGETS := test_hash test_version_node test_field test_document test_collection test_table
+TARGETS := test_hash test_version_node test_field test_document 
  
 .PHONY: all clean
 

@@ -2,8 +2,8 @@
 #define DECODE_AND_EXECUTE_H
 
 #include "ir.h"
-#include "table.h"
+#include "document.h"
 
-int decode_and_execute(Table root, Instr instr);
+int decode_and_execute(Document root, Instr instr);
 
 #endif
