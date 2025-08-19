@@ -6,3 +6,6 @@
 
 /test/test_hash
 /test/test_version_node
+/test/test_field
+/test/test_collection
+/test/test_document
