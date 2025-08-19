@@ -15,10 +15,7 @@ test_field:
 	$(CC) $(CFLAGS) test_field.c ../src/utils/field.c ../src/utils/version_node.c -o test_field
 
 test_document:
-	$(CC) $(CFLAGS) test_document.c ../src/utils/collection.c ../src/utils/document.c ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_document
-
-test_collection:
-	$(CC) $(CFLAGS) test_collection.c ../src/utils/collection.c ../src/utils/document.c ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_collection
+	$(CC) $(CFLAGS) test_document.c ../src/utils/document.c ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_document
 
 test_table:
 	$(CC) $(CFLAGS) test_table.c \

@@ -5,7 +5,6 @@
 #include "field.h"
 #include "hash.h"
 #include "document.h"
-#include "collection.h"
 #include "common.h"
 
 #define DEFAULT_BUCKET_COUNT 16
@@ -26,8 +25,8 @@ Document document_create(void) {
         return NULL;
     }
 
-    doc->subcollections = hashmap_create(DEFAULT_BUCKET_COUNT);
-    if (!doc->subcollections) {
+    doc->subdocuments = hashmap_create(DEFAULT_BUCKET_COUNT);
+    if (!doc->subdocuments) {
         hashmap_free(doc->fields);
         pthread_rwlock_destroy(&doc->lock);
         free(doc);
@@ -40,21 +39,20 @@ Document document_create(void) {
 void document_free(Document doc) {
     if (!doc) return;
     hashmap_free(doc->fields);
-    hashmap_free(doc->subcollections);
+    hashmap_free(doc->subdocuments);  // recursively frees subdocuments
     pthread_rwlock_destroy(&doc->lock);
     free(doc);
 }
 
 // Field getters/setters
 Field document_get_field(Document doc, const char *key, uint64_t local_version) {
-   if (!doc || !key) return NULL;
-   if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
-   Field field = hashmap_get(doc->fields, key, local_version);
-   pthread_rwlock_unlock(&doc->lock);
-   return field;
+    if (!doc || !key) return NULL;
+    if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
+    Field field = hashmap_get(doc->fields, key, local_version);
+    pthread_rwlock_unlock(&doc->lock);
+    return field;
 }
 
-// Putting a Version_Node(Field) into the hashmap
 int document_set_field(Document doc, const char *key, Field field, uint64_t global_version) {
     if (!doc || !key || !field) return -1;
     if (pthread_rwlock_wrlock(&doc->lock) != 0) return -1;
@@ -63,19 +61,21 @@ int document_set_field(Document doc, const char *key, Field field, uint64_t glob
     return 0;
 }
 
-// Subcollection getters/setters
-Collection document_get_subcollection(Document doc, const char *key, uint64_t local_version) {
+// Subdocument getters/setters
+Document document_get_subdocument(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
-    if (pthread_rwlock_wrlock(&doc->lock) != 0) return NULL;
-    Collection subcol = hashmap_get(doc->subcollections, key, local_version);
+    if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
+    Document subdoc = hashmap_get(doc->subdocuments, key, local_version);
     pthread_rwlock_unlock(&doc->lock);
-    return subcol;
+    return subdoc;
 }
 
-int document_set_subcollection(Document doc, const char *key, Collection subcoll, uint64_t global_version) {
-    if (!doc || !key || !subcoll) return -1;
+int document_set_subdocument(Document doc, const char *key, Document subdoc, uint64_t global_version) {
+    if (!doc || !key || !subdoc) return -1;
     if (pthread_rwlock_wrlock(&doc->lock) != 0) return -1;
-    if (hashmap_put(doc->subcollections, key, subcoll, global_version, (void (*)(void *))collection_free) != 0) return -1;
+    if (hashmap_put(doc->subdocuments, key, subdoc, global_version, (void (*)(void *))document_free) != 0)
+        return -1;
     pthread_rwlock_unlock(&doc->lock);
     return 0;
 }
+

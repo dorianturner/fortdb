@@ -5,7 +5,6 @@
 
 #include "document.h"
 #include "field.h"
-#include "collection.h"
 
 /* tiny strdup replacement */
 static char *my_strdup(const char *s) {
@@ -61,22 +60,22 @@ int main(void) {
     assert(got1 == f2);
     assert(got0_again == f1);
 
-    /* ---------------- Subcollection tests ---------------- */
-    Collection c1 = collection_create();
-    assert(c1);
-    assert(document_set_subcollection(doc, "sub", c1, 200) == 0);
+    /* ---------------- Subdocument tests ---------------- */
+    Document sub1 = document_create();
+    assert(sub1);
+    assert(document_set_subdocument(doc, "sub", sub1, 200) == 0);
 
-    Collection sub0 = document_get_subcollection(doc, "sub", 0);
-    assert(sub0 == c1);
+    Document got_sub0 = document_get_subdocument(doc, "sub", 0);
+    assert(got_sub0 == sub1);
 
-    Collection c2 = collection_create();
-    assert(c2);
-    assert(document_set_subcollection(doc, "sub", c2, 201) == 0);
+    Document sub2 = document_create();
+    assert(sub2);
+    assert(document_set_subdocument(doc, "sub", sub2, 201) == 0);
 
-    Collection sub1 = document_get_subcollection(doc, "sub", 1);
-    Collection sub0_again = document_get_subcollection(doc, "sub", 0);
-    assert(sub1 == c2);
-    assert(sub0_again == c1);
+    Document got_sub1 = document_get_subdocument(doc, "sub", 1);
+    Document got_sub0_again = document_get_subdocument(doc, "sub", 0);
+    assert(got_sub1 == sub2);
+    assert(got_sub0_again == sub1);
 
     /* ---------------- Free everything ---------------- */
     document_free(doc);

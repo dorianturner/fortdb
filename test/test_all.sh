@@ -6,7 +6,6 @@ tests=(
   test_version_node
   test_hash
   test_field
-  test_collection
   test_document
   test_table
 )
