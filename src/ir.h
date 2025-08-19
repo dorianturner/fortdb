@@ -13,14 +13,6 @@ typedef enum {
     SAVE
 } INSTR_TYPE;
 
-// depracated
-typedef enum {
-    STRING,
-    INT,
-    FLOAT,
-    BOOLEAN
-} DATA_TYPE;
-
 typedef struct Instr *Instr;
 struct Instr {
     INSTR_TYPE instr_type;
@@ -29,7 +21,6 @@ struct Instr {
         struct {
             char *value;
             const char *path;
-            // DATA_TYPE type;
         } set;
         struct {
             char *key;
