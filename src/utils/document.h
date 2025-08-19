@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include "field.h"
 #include "hash.h"
-#include "collection.h"
 
 struct Collection;
 typedef struct Collection *Collection;
