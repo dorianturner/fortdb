@@ -5,3 +5,4 @@
 /src/utils/*.o
 
 /test/test_hash
+/test/test_version_node
