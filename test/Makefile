@@ -1,6 +1,6 @@
 CC := gcc
 CFLAGS := -D_POSIX_C_SOURCE=200809L -Wall -Wextra -std=c11 -I../src -I../src/utils
-TARGETS := test_hash test_version_node test_field test_document test_collection
+TARGETS := test_hash test_version_node test_field test_document test_collection test_table
  
 .PHONY: all clean
 
@@ -19,6 +19,11 @@ test_document:
 
 test_collection:
 	$(CC) $(CFLAGS) test_collection.c ../src/utils/collection.c ../src/utils/document.c ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_collection
+
+test_table:
+	$(CC) $(CFLAGS) test_table.c \
+	    ../src/utils/table.c ../src/utils/collection.c ../src/utils/document.c \
+	    ../src/utils/field.c ../src/utils/hash.c ../src/utils/version_node.c -o test_table
 
 clean:
 	rm -f $(TARGETS) *.o

@@ -104,16 +104,16 @@ int table_set_field(Table table, const char *path, const char *value, uint64_t g
     return field_set(field, copy, global_version, free);
 }
 
-void *table_get_field(Table table, const char *path, uint64_t version) {
+void *table_get_field(Table table, const char *path, uint64_t local_version) {
     if (!table || !path) return NULL;
 
     pthread_rwlock_rdlock(&table->lock);
-    Field field = resolve_path(table, path, version);
+    Field field = resolve_path(table, path, local_version);
     if (!field) {
         pthread_rwlock_unlock(&table->lock);
         return NULL;
     }
-    void *value = field_get(field, version);
+    void *value = field_get(field, local_version);
     pthread_rwlock_unlock(&table->lock);
     return value;
 }
