@@ -3,3 +3,5 @@
 /src/*.o
 /src/fortdb
 /src/utils/*.o
+
+/test/test_hash
