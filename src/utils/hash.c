@@ -4,8 +4,6 @@
 #include "hash.h"
 #include "version_node.h"
 
-#define LOAD_FACTOR 0.75
-
 // FNV-1a hashing, see wikipedia
 static uint64_t hash(const char *key) {
     uint64_t hash = 14695981039346656037ULL;
@@ -20,6 +18,7 @@ Hashmap hashmap_create(uint64_t bucket_count) {
     Hashmap map = malloc(sizeof(struct Hashmap));
     if (!map) return NULL;
 
+    map->datapoints = 0;
     map->bucket_count = bucket_count;
     map->size = 0;
     map->buckets = calloc(bucket_count, sizeof(Entry));
@@ -30,6 +29,8 @@ Hashmap hashmap_create(uint64_t bucket_count) {
 
     return map;
 }
+
+//why is this still called entry??
 
 // PRE: Entry values are always VersionNodes
 static void entry_free(Entry entry) {
@@ -51,28 +52,6 @@ void hashmap_free(Hashmap map) {
     free(map);
 }
 
-static int hashmap_rehash(Hashmap map, uint64_t new_bucket_count) {
-    Entry *new_buckets = calloc(new_bucket_count, sizeof(Entry));
-    if (!new_buckets) return -1;
-
-    for (uint64_t i = 0; i < map->bucket_count; i++) {
-        Entry current = map->buckets[i];
-        while (current) {
-            Entry next = current->next;
-            uint64_t index = hash(current->key) % new_bucket_count;
-            current->next = new_buckets[index];
-            new_buckets[index] = current;
-            current = next;
-        }
-    }
-
-    free(map->buckets);
-    map->buckets = new_buckets;
-    map->bucket_count = new_bucket_count;
-    return 0;
-}
-
-
 // PRE: Entrys contain version nodes
 int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *)) {
     if (!map || !key || !value) return -1;
@@ -87,6 +66,18 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
             VersionNode new_head = version_node_create(value, global_version, local_version, old_head, free_value);
             if (!new_head) return -1;
             current->value = new_head;
+
+            //for serialization purposes
+            map->datapoints++;
+            if(map->head){
+                map->tail->prev = new_head;
+                map->tail = new_head;
+            }else{
+                map->head = new_head;
+                map->tail = new_head;
+            }
+            
+
             return 0;
         }
         current = current->next;
@@ -114,15 +105,17 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
     map->buckets[index] = new_entry;
     map->size++;
 
-    // check load factor and grow if necessary
-    if ((double)map->size / map->bucket_count > LOAD_FACTOR) {
-        if (hashmap_rehash(map, map->bucket_count * 2) != 0) {
-            return -1;
-        }
+    //for serialization purposes
+    map->datapoints++;
+    if(map->head){
+        map->tail->prev = new_head;
+        map->tail = new_head;
+    }else{
+        map->head = new_head;
+        map->tail = new_head;
     }
-
+    
     return 0;
-
 }
 // POST: We have put an Entry(VersionNode(value)) to the right bucket
 

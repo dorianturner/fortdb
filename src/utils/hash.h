@@ -2,9 +2,20 @@
 #define HASH_H
 
 #include <stdint.h>
-
+#include "version_node.h"
 typedef struct Entry *Entry;
 typedef struct Hashmap *Hashmap;
+
+struct Hashmap {
+    Entry *buckets;
+    uint64_t bucket_count;
+    uint64_t size;
+
+    uint64_t datapoints;
+    //using versionnode as a linked list, not how it was directly intended for versioning
+    VersionNode head;
+    VersionNode tail;
+};
 
 // Value is always a VersionNode
 struct Entry {
@@ -13,11 +24,7 @@ struct Entry {
     Entry next;
 };
 
-struct Hashmap {
-    Entry *buckets;
-    uint64_t bucket_count;
-    uint64_t size;
-};
+
 
 Hashmap hashmap_create(uint64_t bucket_count);
 void hashmap_free(Hashmap map);

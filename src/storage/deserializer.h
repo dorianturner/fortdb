@@ -1,27 +1,40 @@
-#ifndef DESERIALIZER_H
-#define DESERIALIZER_H
+#ifndef DOCUMENT_DESERIALIZE_H
+#define DOCUMENT_DESERIALIZE_H
 
-#include <stdint.h>
 #include <stdio.h>
+#include <stdint.h>
 
-// Forward declarations (same as in serializer.h)
+// Error codes
+#define ERR_OK          0
+#define ERR_MEM         1
+#define ERR_LOCK        2
+#define ERR_INVALID     3
+#define ERR_WRITE       4
+
+// Forward declarations
+struct VersionNode;
+struct Document;
+typedef struct VersionNode* VersionNode;
 typedef struct Document* Document;
-typedef struct VersionNode VersionNode;
+typedef struct Hashmap* Hashmap;
 
-/* Error codes (mirror serializer for consistency) */
-#define ERR_OK      0
-#define ERR_READ    1
-#define ERR_INVALID 2
-#define ERR_MEM     3
-#define ERR_LOCK    4
+/*
+ * Deserialize a single field's VersionNode chain from a file.
+ * Allocates memory for values. Caller must free via version_node_free.
+ */
+int deserialize_field(FILE* f, VersionNode* out_versions);
 
-/* Read a single field (path, type, versions) from a file */
-int read_field_entry(FILE* f, char** out_path, uint32_t* out_type, VersionNode** out_versions);
+/*
+ * Deserialize a hashmap from a file.
+ * - map: the hashmap to populate
+ * - is_field: 1 for fields, 0 for subdocuments
+ */
+int deserialize_hashmap(FILE* f, Hashmap map, int is_field);
 
-/* Recursively deserialize a document and its subdocuments */
-int deserialize_document(Document doc, const char* path_prefix, FILE* f);
+/*
+ * Deserialize an entire document from a file.
+ * Populates the fields and subdocuments hashmaps.
+ */
+int deserialize_document(FILE* f, Document doc);
 
-/* Deserialize an entire DB from a file */
-int deserialize_db(Document* out_root, const char* filename);
-
-#endif /* DESERIALIZER_H */
+#endif
