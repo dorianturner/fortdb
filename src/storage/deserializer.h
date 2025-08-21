@@ -1,40 +1,31 @@
-#ifndef DOCUMENT_DESERIALIZE_H
-#define DOCUMENT_DESERIALIZE_H
+#ifndef DESERIALIZER_H
+#define DESERIALIZER_H
 
 #include <stdio.h>
 #include <stdint.h>
 
-// Error codes
-#define ERR_OK          0
-#define ERR_MEM         1
-#define ERR_LOCK        2
-#define ERR_INVALID     3
-#define ERR_WRITE       4
-
-// Forward declarations
 struct VersionNode;
+typedef struct VersionNode *VersionNode;
+
 struct Document;
-typedef struct VersionNode* VersionNode;
-typedef struct Document* Document;
-typedef struct Hashmap* Hashmap;
+typedef struct Document *Document;
 
-/*
- * Deserialize a single field's VersionNode chain from a file.
- * Allocates memory for values. Caller must free via version_node_free.
+/* Deserialize the entire database from a file into a VersionNode root.
+ * Returns 0 on success, -1 on failure.
+ * On success, `*root` will point to the reconstructed version chain.
  */
-int deserialize_field(FILE* f, VersionNode* out_versions);
+int deserialize_db(const char *filename, VersionNode *root_out);
 
-/*
- * Deserialize a hashmap from a file.
- * - map: the hashmap to populate
- * - is_field: 1 for fields, 0 for subdocuments
+/* Deserialize a Document from an open FILE*.
+ * Returns 0 on success, -1 on failure.
+ * Reconstructs fields and subdocuments recursively.
  */
-int deserialize_hashmap(FILE* f, Hashmap map, int is_field);
+int deserialize_document(Document *doc_out, FILE *file);
 
-/*
- * Deserialize an entire document from a file.
- * Populates the fields and subdocuments hashmaps.
+/* Deserialize a single VersionNode from an open FILE*.
+ * Handles string, tombstone, and Document payloads.
+ * Returns 0 on success, -1 on failure.
  */
-int deserialize_document(FILE* f, Document doc);
+int deserialize_version_node(VersionNode *ver_out, FILE *file);
 
-#endif
+#endif /* DESERIALIZER_H */

@@ -17,175 +17,197 @@
 #include <endian.h>         // htobe64, be64toh
 #endif
 
-static char deleted_marker;
-#define DELETED ((void *)&deleted_marker)
+#define MAGIC "DBV1"
+static const uint32_t FORMAT_VER = 1;
 
 #include "serializer.h"
 #include "version_node.h"
 #include "document.h"
-#include "field.h"
 #include "hash.h"
 
-#ifndef ERR_OK
-#define ERR_OK 0
-#define ERR_WRITE 1
-#define ERR_LOCK 2
-#define ERR_NOMEM 3
-#endif
+int deserialize_db(const char *filename, VersionNode *root_out) {
+    if (!filename || !root_out) return -1;
 
-/* Type tags for version node payloads */
-#define TAG_STRING   1   /* value is NUL-terminated C string (binary-safe via strlen) */
-#define TAG_SUBDOC   2   /* value is Document* */
-#define TAG_DELETED  3   /* value == DELETED */
+    FILE *f = fopen(filename, "rb");
+    if (!f) return -1;
 
-/* Forward declarations of your prewritten types (user-supplied elsewhere) */
-typedef struct VersionNode *VersionNode;
-typedef struct Entry *Entry;
-typedef struct Hashmap *Hashmap;
-typedef struct Document *Document;
-typedef struct Field *Field;
+    char magic[4];
+    uint32_t be32;
 
-/* External functions provided elsewhere in codebase (declared here for compiler) */
-extern Document document_create(void);
-extern void document_free(Document doc);
-extern Field field_create(const char *name);
-extern void field_free(Field field);
+    // 1. Read and verify magic
+    if (fread(magic, 1, 4, f) != 4) goto fail;
+    if (memcmp(magic, MAGIC, 4) != 0) goto fail;
 
-/* Forward prototype */
-int serialize_document(Document doc, FILE *f);
+    // 2. Read and verify format version
+    if (fread(&be32, sizeof(be32), 1, f) != 1) goto fail;
+    if (ntohl(be32) != FORMAT_VER) goto fail;
 
-/* Write a version chain. is_field==1 => treat value as C string or DELETED.
-   is_field==0 => treat value as Document* or DELETED. */
-static int write_version_node(FILE *f, VersionNode v, int is_field) {
-    /* count nodes in chain */
-    uint64_t count = 0;
-    for (VersionNode t = v; t; t = t->prev) count++;
-    uint64_t count_be = htobe64(count);
-    if (fwrite(&count_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
+    // 3. Skip reserved flags
+    if (fread(&be32, sizeof(be32), 1, f) != 1) goto fail;
 
-    /* write nodes latest-first */
-    for (VersionNode t = v; t; t = t->prev) {
-        uint64_t local_be = htobe64(t->local_version);
-        uint64_t global_be = htobe64(t->global_version);
-        if (fwrite(&local_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
-        if (fwrite(&global_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
+    // 4. Read count of root versions
+    uint64_t be64;
+    if (fread(&be64, sizeof(be64), 1, f) != 1) goto fail;
+    uint64_t ver_count = be64toh(be64);
 
-        /* determine tag */
-        if (t->value == DELETED) {
-            uint8_t tag = TAG_DELETED;
-            if (fwrite(&tag, sizeof(uint8_t), 1, f) != 1) return ERR_WRITE;
-            /* no payload */
-            continue;
-        }
+    VersionNode root = NULL, prev = NULL;
+    for (uint64_t i = 0; i < ver_count; i++) {
+        VersionNode ver = NULL;
+        if (deserialize_version_node(&ver, f) != 0) goto fail;
 
-        if (is_field) {
-            /* fields: expect C string (user code used strlen previously).
-               This is binary-safe only if values are NUL-terminated strings.
-               If your values can be binary blobs, you must add a length field
-               to VersionNode in the core data model. */
-            char *s = (char *)t->value;
-            uint8_t tag = TAG_STRING;
-            if (fwrite(&tag, sizeof(uint8_t), 1, f) != 1) return ERR_WRITE;
-
-            uint64_t val_len = (s != NULL) ? (uint64_t)strlen(s) : 0;
-            uint64_t val_len_be = htobe64(val_len);
-            if (fwrite(&val_len_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
-            if (val_len > 0) {
-                if (fwrite(s, 1, val_len, f) != val_len) return ERR_WRITE;
-            }
-        } else {
-            /* subdocuments: expect Document* */
-            uint8_t tag = TAG_SUBDOC;
-            if (fwrite(&tag, sizeof(uint8_t), 1, f) != 1) return ERR_WRITE;
-            Document sub = (Document)t->value;
-            if (!sub) {
-                /* treat NULL subdocument as zero-length subdoc: write zero entries */
-                /* We still call serialize_document which will write empty maps. */
-            }
-            int res = serialize_document(sub, f);
-            if (res != ERR_OK) return res;
-        }
-    }
-    return ERR_OK;
-}
-
-/* Serialize a hashmap as:
-   [uint64_t entry_count]
-     for each entry:
-       [uint32_t key_len][key bytes]
-       [version_chain...] (written by write_version_node)
-*/
-int serialize_hashmap(FILE* f, Hashmap map, int is_field) {
-    if (!map) {
-        uint64_t zero = 0;
-        uint64_t zero_be = htobe64(zero);
-        if (fwrite(&zero_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
-        return ERR_OK;
+        // Link versions latest → oldest
+        ver->prev = prev;
+        prev = ver;
+        if (!root) root = ver;
     }
 
-    /* count entries (iterate buckets) */
-    uint64_t entries = 0;
-    for (uint64_t i = 0; i < map->bucket_count; i++) {
-        Entry e = map->buckets[i];
-        while (e) { entries++; e = e->next; }
-    }
-    uint64_t entries_be = htobe64(entries);
-    if (fwrite(&entries_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE;
-
-    /* write entries */
-    for (uint64_t i = 0; i < map->bucket_count; i++) {
-        Entry e = map->buckets[i];
-        while (e) {
-            const char *key = e->key ? e->key : "";
-            uint32_t key_len = (uint32_t)strlen(key);
-            uint32_t key_len_be = htonl(key_len);
-            if (fwrite(&key_len_be, sizeof(uint32_t), 1, f) != 1) return ERR_WRITE;
-            if (key_len > 0) {
-                if (fwrite(key, 1, key_len, f) != key_len) return ERR_WRITE;
-            }
-
-            /* e->value is a VersionNode per your definitions */
-            VersionNode v = (VersionNode)e->value;
-            int res = write_version_node(f, v, is_field);
-            if (res != ERR_OK) return res;
-
-            e = e->next;
-        }
-    }
-    return ERR_OK;
-}
-
-int serialize_document(Document doc, FILE* f) {
-    if (!doc) {
-        /* write empty maps for a NULL document */
-        uint64_t zero = 0;
-        uint64_t zero_be = htobe64(zero);
-        if (fwrite(&zero_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE; /* fields count */
-        if (fwrite(&zero_be, sizeof(uint64_t), 1, f) != 1) return ERR_WRITE; /* subdocs count */
-        return ERR_OK;
-    }
-
-    if (pthread_rwlock_rdlock(&doc->lock) != 0) return ERR_LOCK;
-
-    int res;
-    res = serialize_hashmap(f, doc->fields, 1);
-    if (res != ERR_OK) { pthread_rwlock_unlock(&doc->lock); return res; }
-
-    res = serialize_hashmap(f, doc->subdocuments, 0);
-    if (res != ERR_OK) { pthread_rwlock_unlock(&doc->lock); return res; }
-
-    pthread_rwlock_unlock(&doc->lock);
-    return ERR_OK;
-}
-
-int serialize_db(Document root, const char *filename) {
-    FILE *f = fopen(filename, "wb");
-    if (!f) return ERR_WRITE;
-
-    uint32_t db_version = htonl(1);
-    if (fwrite(&db_version, sizeof(uint32_t), 1, f) != 1) { fclose(f); return ERR_WRITE; }
-
-    int res = serialize_document(root, f);
     fclose(f);
-    return res;
+    *root_out = root;
+    return 0;
+
+fail:
+    if (f) fclose(f);
+    *root_out = NULL;
+    return -1;
+}
+
+
+int deserialize_document(Document *doc_out, FILE *file) {
+    if (!doc_out || !file) return -1;
+
+    Document doc = document_create();
+    if (!doc) return -1;
+
+    uint64_t be64, field_count;
+
+    // 1. Fields
+    if (fread(&be64, sizeof(be64), 1, file) != 1) goto fail;
+    field_count = be64toh(be64);
+
+    for (uint64_t i = 0; i < field_count; i++) {
+        if (fread(&be64, sizeof(be64), 1, file) != 1) goto fail;
+        uint64_t key_len = be64toh(be64);
+
+        char *key = malloc(key_len + 1);
+        if (!key) goto fail;
+        if (key_len && fread(key, 1, (size_t)key_len, file) != (size_t)key_len) {
+            free(key);
+            goto fail;
+        }
+        key[key_len] = '\0';
+
+        // Read version chain count
+        if (fread(&be64, sizeof(be64), 1, file) != 1) { free(key); goto fail; }
+        uint64_t ver_count = be64toh(be64);
+
+        VersionNode head = NULL, prev = NULL;
+        for (uint64_t v = 0; v < ver_count; v++) {
+            VersionNode ver = NULL;
+            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            ver->prev = prev;
+            prev = ver;
+            if (!head) head = ver;
+        }
+
+        // Insert chain into hashmap directly
+        hashmap_set_raw(doc->fields, key, head);
+        free(key);
+    }
+
+    // 2. Subdocuments
+    if (fread(&be64, sizeof(be64), 1, file) != 1) goto fail;
+    uint64_t subdoc_count = be64toh(be64);
+
+    for (uint64_t i = 0; i < subdoc_count; i++) {
+        if (fread(&be64, sizeof(be64), 1, file) != 1) goto fail;
+        uint64_t key_len = be64toh(be64);
+
+        char *key = malloc(key_len + 1);
+        if (!key) goto fail;
+        if (key_len && fread(key, 1, (size_t)key_len, file) != (size_t)key_len) {
+            free(key);
+            goto fail;
+        }
+        key[key_len] = '\0';
+
+        if (fread(&be64, sizeof(be64), 1, file) != 1) { free(key); goto fail; }
+        uint64_t ver_count = be64toh(be64);
+
+        VersionNode head = NULL, prev = NULL;
+        for (uint64_t v = 0; v < ver_count; v++) {
+            VersionNode ver = NULL;
+            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            ver->prev = prev;
+            prev = ver;
+            if (!head) head = ver;
+        }
+
+        hashmap_set_raw(doc->subdocuments, key, head);
+        free(key);
+    }
+
+    *doc_out = doc;
+    return 0;
+
+fail:
+    if (doc) document_free(doc);
+    return -1;
+}
+
+int deserialize_version_node(VersionNode *ver_out, FILE *file) {
+    if (!ver_out || !file) return -1;
+
+    uint64_t be64;
+    uint8_t type;
+
+    // global_version
+    if (fread(&be64, sizeof(be64), 1, file) != 1) return -1;
+    uint64_t global_version = be64toh(be64);
+
+    // local_version
+    if (fread(&be64, sizeof(be64), 1, file) != 1) return -1;
+    uint64_t local_version = be64toh(be64);
+
+    // type
+    if (fread(&type, sizeof(type), 1, file) != 1) return -1;
+
+    void *value = NULL;
+    void (*free_value)(void *) = NULL;
+
+    switch (type) {
+        case 0: // tombstone
+            value = DELETED;
+            break;
+
+        case 1: { // string
+            if (fread(&be64, sizeof(be64), 1, file) != 1) return -1;
+            uint64_t len = be64toh(be64);
+            char *str = malloc(len + 1);
+            if (!str) return -1;
+            if (len && fread(str, 1, (size_t)len, file) != (size_t)len) {
+                free(str);
+                return -1;
+            }
+            str[len] = '\0';
+            value = str;
+            free_value = free;
+            break;
+        }
+
+        case 2: { // subdocument
+            Document doc = NULL;
+            if (deserialize_document(&doc, file) != 0) return -1;
+            value = doc;
+            break;
+        }
+
+        default:
+            return -1;
+    }
+
+    VersionNode node = version_node_create(value, global_version, local_version, NULL, free_value);
+    if (!node) return -1;
+
+    *ver_out = node;
+    return 0;
 }

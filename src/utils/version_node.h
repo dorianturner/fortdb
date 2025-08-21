@@ -6,6 +6,7 @@
 
 typedef struct VersionNode *VersionNode;
 
+//value should be data or pointer
 struct VersionNode {
     void *value;
     uint64_t global_version;

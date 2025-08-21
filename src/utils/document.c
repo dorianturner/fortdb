@@ -1,5 +1,11 @@
 #define _GNU_SOURCE
+
+#if defined(_WIN32)
+#include "windows_compat.h"
+#else
 #include <pthread.h>
+#endif
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

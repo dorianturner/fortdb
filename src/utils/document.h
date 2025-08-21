@@ -1,7 +1,11 @@
 #ifndef DOCUMENT_H
 #define DOCUMENT_H
 
+#if defined(_WIN32)
+#include "windows_compat.h"
+#else
 #include <pthread.h>
+#endif
 #include <stdint.h>
 #include "hash.h"
 

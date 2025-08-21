@@ -170,3 +170,18 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     return NULL;
 }
 
+static int hashmap_set_raw(Hashmap map, const char *key, void *value_chain) {
+    if (!map || !key) return -1;
+
+    uint64_t index = hash(key) % map->bucket_count;
+
+    Entry new_entry = malloc(sizeof(struct Entry));
+    if (!new_entry) return -1;
+    new_entry->key = strdup(key);
+    if (!new_entry->key) { free(new_entry); return -1; }
+    new_entry->value = value_chain;
+    new_entry->next = map->buckets[index];
+    map->buckets[index] = new_entry;
+    map->size++;
+    return 0;
+}

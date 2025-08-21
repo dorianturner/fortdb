@@ -1,27 +1,32 @@
 #ifndef SERIALIZER_H
 #define SERIALIZER_H
 
-#include <stdint.h>
 #include <stdio.h>
+#include <stdint.h>
 
-// Forward declarations to avoid pulling in full internals unnecessarily
-typedef struct Document* Document;
-typedef struct VersionNode* VersionNode;
+struct VersionNode;
+typedef struct VersionNode *VersionNode;
 
-/* Error codes */
-#define ERR_OK      0
-#define ERR_WRITE   1
-#define ERR_INVALID 2
-#define ERR_MEM     3
-#define ERR_LOCK    4
+struct Document;
+typedef struct Document *Document;
 
-/* Write a single field (path, type, versions) into a file */
-int write_field_entry(FILE* f, const char* path, uint32_t type, VersionNode* versions);
+/* Deleted marker pointer */
+extern void * const DELETED;
 
-/* Recursively serialize a document and its subdocuments */
-int serialize_document(Document doc, const char *path_prefix, FILE *f);
+/* Serialize the entire database root (VersionNode containing Document) to file atomically.
+ * Returns 0 on success, -1 on failure.
+ */
+int serialize_db(VersionNode root, const char *filename);
 
-/* Serialize an entire DB rooted at `root` into a file */
-int serialize_db(Document root, const char *filename);
+/* Serialize a Document to an open FILE*.
+ * Returns 0 on success, -1 on failure.
+ */
+int serialize_document(Document doc, FILE *file);
+
+/* Serialize a single VersionNode to an open FILE*.
+ * Handles string, tombstone, and Document payloads.
+ * Returns 0 on success, -1 on failure.
+ */
+int serialize_version_node(VersionNode ver, FILE *file);
 
 #endif /* SERIALIZER_H */
