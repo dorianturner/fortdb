@@ -16,7 +16,8 @@ else
 	RM       := rm -f
 endif
 
-SRC      := $(wildcard *.c) $(wildcard utils/*.c)
+SRC_ALL  := $(wildcard *.c) $(wildcard utils/*.c)
+SRC      := $(filter-out utils/windows_compat.c, $(SRC_ALL))
 OBJ      := $(SRC:.c=.o)
 TARGET   := fortdb
 
@@ -32,3 +33,4 @@ $(TARGET): $(OBJ)
 
 clean:
 	$(RM) $(OBJ) $(TARGET)
+

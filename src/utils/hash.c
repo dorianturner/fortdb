@@ -4,7 +4,9 @@
 #include "hash.h"
 #include "version_node.h"
 
-// FNV-1a hashing, see wikipedia
+#define LOAD_FACTOR 0.75
+
+// FNV-1a hashing
 static uint64_t hash(const char *key) {
     uint64_t hash = 14695981039346656037ULL;
     while (*key) {
@@ -18,21 +20,19 @@ Hashmap hashmap_create(uint64_t bucket_count) {
     Hashmap map = malloc(sizeof(struct Hashmap));
     if (!map) return NULL;
 
-    map->datapoints = 0;
+    map->datapoints   = 0;
     map->bucket_count = bucket_count;
-    map->size = 0;
-    map->buckets = calloc(bucket_count, sizeof(Entry));
+    map->size         = 0;
+    map->head         = NULL;
+    map->tail         = NULL;
+    map->buckets      = calloc(bucket_count, sizeof(Entry));
     if (!map->buckets) {
         free(map);
         return NULL;
     }
-
     return map;
 }
 
-//why is this still called entry??
-
-// PRE: Entry values are always VersionNodes
 static void entry_free(Entry entry) {
     while (entry) {
         Entry next = entry->next;
@@ -52,45 +52,64 @@ void hashmap_free(Hashmap map) {
     free(map);
 }
 
-// PRE: Entrys contain version nodes
-int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *)) {
+static int hashmap_rehash(Hashmap map, uint64_t new_bucket_count) {
+    Entry *new_buckets = calloc(new_bucket_count, sizeof(Entry));
+    if (!new_buckets) return -1;
+
+    for (uint64_t i = 0; i < map->bucket_count; i++) {
+        Entry current = map->buckets[i];
+        while (current) {
+            Entry next = current->next;
+            uint64_t index = hash(current->key) % new_bucket_count;
+            current->next = new_buckets[index];
+            new_buckets[index] = current;
+            current = next;
+        }
+    }
+
+    free(map->buckets);
+    map->buckets      = new_buckets;
+    map->bucket_count = new_bucket_count;
+    return 0;
+}
+
+int hashmap_put(Hashmap map, const char *key, void *value,
+                uint64_t global_version, void (free_value)(void *)) {
     if (!map || !key || !value) return -1;
 
-    /* If inserting one more would exceed load factor, try to grow first */
+    /* Grow if load factor exceeded */
     if ((double)(map->size + 1) / (double)map->bucket_count > LOAD_FACTOR) {
-        /* ignore rehash failure and continue */
         (void)hashmap_rehash(map, map->bucket_count * 2);
     }
 
     uint64_t index = hash(key) % map->bucket_count;
-    Entry current = map->buckets[index];
+    Entry current  = map->buckets[index];
 
-    /* If key exists, prepend a new VersionNode to its chain */
+    // Update existing key
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            VersionNode old_head = (VersionNode)current->value;
-            uint64_t local_version = old_head ? old_head->local_version + 1 : 1;
-            VersionNode new_head = version_node_create(value, global_version, local_version, old_head, free_value);
+            VersionNode old_head    = (VersionNode)current->value;
+            uint64_t local_version  = old_head ? old_head->local_version + 1 : 1;
+            VersionNode new_head    = version_node_create(
+                                          value, global_version,
+                                          local_version, old_head, free_value);
             if (!new_head) return -1;
             current->value = new_head;
 
-            //for serialization purposes
+            // serialization bookkeeping
             map->datapoints++;
-            if(map->head){
+            if (map->head) {
                 map->tail->prev = new_head;
-                map->tail = new_head;
-            }else{
-                map->head = new_head;
-                map->tail = new_head;
+                map->tail       = new_head;
+            } else {
+                map->head = map->tail = new_head;
             }
-            
-
             return 0;
         }
         current = current->next;
     }
 
-    /* Key not found: create new entry with local_version = 1 */
+    // Insert new key
     VersionNode new_head = version_node_create(value, global_version, 1, NULL, free_value);
     if (!new_head) return -1;
 
@@ -107,44 +126,37 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
         return -1;
     }
 
-    /* Recompute index in case rehash changed bucket_count earlier */
-    index = hash(key) % map->bucket_count;
+    index = hash(key) % map->bucket_count; // in case rehash happened
     new_entry->value = new_head;
-    new_entry->next = map->buckets[index];
+    new_entry->next  = map->buckets[index];
     map->buckets[index] = new_entry;
     map->size++;
 
-    //for serialization purposes
+    // serialization bookkeeping
     map->datapoints++;
-    if(map->head){
+    if (map->head) {
         map->tail->prev = new_head;
-        map->tail = new_head;
-    }else{
-        map->head = new_head;
-        map->tail = new_head;
+        map->tail       = new_head;
+    } else {
+        map->head = map->tail = new_head;
     }
-    
     return 0;
 }
 
-// POST: We have put an Entry(VersionNode(value)) to the right bucket
-
-// A bit inefficient for now ig but how to make faster idk (maybe iterators)
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     if (!map || !key) return NULL;
 
     uint64_t index = hash(key) % map->bucket_count;
-    Entry current = map->buckets[index];
+    Entry current  = map->buckets[index];
 
     while (current) {
         if (strcmp(current->key, key) == 0) {
             VersionNode head = (VersionNode)current->value;
 
-            /* Treat local_version == 0 as "latest" for backward compatibility. */
+            // local_version == 0 → latest
             if (local_version == 0) {
                 return head ? head->value : NULL;
             }
-
             while (head && head->local_version >= local_version) {
                 if (head->local_version == local_version) {
                     return head->value;
@@ -155,8 +167,6 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
         }
         current = current->next;
     }
-
     return NULL;
 }
-
 
