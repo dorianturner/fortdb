@@ -5,11 +5,28 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "field.h"
 #include "hash.h"
 #include "document.h"
+#include "version_node.h"
+
+#ifndef DELETED
+#define DELETED ((void*)1)
+#endif
 
 #define DEFAULT_BUCKET_COUNT 16
+
+/* Helper: find Entry for key by scanning buckets (avoids needing hash() from hash.c) */
+static Entry hashmap_find_entry(Hashmap map, const char *key) {
+    if (!map || !key) return NULL;
+    for (uint64_t i = 0; i < map->bucket_count; i++) {
+        Entry e = map->buckets[i];
+        while (e) {
+            if (strcmp(e->key, key) == 0) return e;
+            e = e->next;
+        }
+    }
+    return NULL;
+}
 
 Document document_create(void) {
     Document doc = malloc(sizeof(struct Document));
@@ -40,7 +57,7 @@ Document document_create(void) {
 
 void document_free(Document doc) {
     if (!doc) return;
-    hashmap_free(doc->fields);        // frees Field objects via their free callback
+    hashmap_free(doc->fields);        // frees string values via their free callback (or leaves sentinel)
     hashmap_free(doc->subdocuments);  // frees subdocuments recursively via document_free callback
     pthread_rwlock_destroy(&doc->lock);
     free(doc);
@@ -100,7 +117,17 @@ static int resolve_parent_and_key(Document root,
 
 /* ---------- field get / set (path-aware) ---------- */
 
-Field document_get_field(Document doc, const char *key_or_path, uint64_t local_version) {
+/*
+ * Returns:
+ *  - pointer to the string value for the requested local_version (do NOT free),
+ *  - DELETED sentinel if it's a tombstone,
+ *  - NULL if not found.
+ *
+ * Caller should treat returned pointer as read-only (owned by the version system).
+ */
+
+/* document_get_field: return exact local_version, or if local_version == UINT64_MAX return latest */
+char *document_get_field(Document doc, const char *key_or_path, uint64_t local_version) {
     if (!doc || !key_or_path) return NULL;
 
     Document parent = NULL;
@@ -115,49 +142,53 @@ Field document_get_field(Document doc, const char *key_or_path, uint64_t local_v
         free(final_key);
         return NULL;
     }
-    Field f = hashmap_get(parent->fields, final_key, local_version);
+
+    /* If caller asked for "latest" sentinel, return head->value directly */
+    if (local_version == UINT64_MAX) {
+        Entry e = hashmap_find_entry(parent->fields, final_key);
+        char *val = NULL;
+        if (e) {
+            VersionNode head = (VersionNode)e->value;
+            val = head ? (char *)head->value : NULL;
+        }
+        pthread_rwlock_unlock(&parent->lock);
+        free(final_key);
+        return val;
+    }
+
+    /* existing exact-match behavior */
+    char *val = (char *)hashmap_get(parent->fields, final_key, local_version);
     pthread_rwlock_unlock(&parent->lock);
     free(final_key);
-    return f;
+    return val;
 }
 
-int document_set_field(Document doc, const char *key, Field field, uint64_t global_version) {
-    if (!doc || !key || !field) return -1;
-    if (pthread_rwlock_wrlock(&doc->lock) != 0) return -1;
-    int rc = hashmap_put(doc->fields, key, field, global_version, (void (*)(void *))field_free);
-    pthread_rwlock_unlock(&doc->lock);
-    return rc;
-}
 
-int document_set_field_cstr(Document doc, const char *key, const char *value, uint64_t global_version) {
+/* set a string value at key (creates/updates the version chain). value is duplicated internally. */
+int document_set_field(Document doc, const char *key, const char *value, uint64_t global_version) {
     if (!doc || !key || !value) return -1;
 
-    Field f = field_create(key);
-    if (!f) return -1;
-
     char *dup = strdup(value);
-    if (!dup) {
-        field_free(f);
-        return -1;
-    }
-
-    if (field_set(f, dup, global_version, free) != 0) {
-        free(dup);
-        field_free(f);
-        return -1;
-    }
+    if (!dup) return -1;
 
     if (pthread_rwlock_wrlock(&doc->lock) != 0) {
-        field_free(f);
+        free(dup);
         return -1;
     }
-    int rc = hashmap_put(doc->fields, key, f, global_version, (void (*)(void *))field_free);
+    /* pass free as the free_value callback so the string will be freed when the version chain is freed */
+    int rc = hashmap_put(doc->fields, key, dup, global_version, free);
     pthread_rwlock_unlock(&doc->lock);
     if (rc != 0) {
-        field_free(f);
+        /* hashmap_put failed and will not have taken ownership of dup */
+        free(dup);
         return -1;
     }
     return 0;
+}
+
+/* Convenience: keep an alias for the previous name (still duplicates value internally) */
+int document_set_field_cstr(Document doc, const char *key, const char *value, uint64_t global_version) {
+    return document_set_field(doc, key, value, global_version);
 }
 
 int document_set_field_path(Document root, const char *path, const char *value, uint64_t global_version) {
@@ -170,7 +201,7 @@ int document_set_field_path(Document root, const char *path, const char *value, 
     }
     if (!parent || !final_key) { free(final_key); return -1; }
 
-    int rc = document_set_field_cstr(parent, final_key, value, global_version);
+    int rc = document_set_field(parent, final_key, value, global_version);
     free(final_key);
     return rc;
 }
@@ -180,7 +211,7 @@ int document_set_field_path(Document root, const char *path, const char *value, 
 Document document_get_subdocument(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
     if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
-    Document subdoc = hashmap_get(doc->subdocuments, key, local_version);
+    Document subdoc = (Document)hashmap_get(doc->subdocuments, key, local_version);
     pthread_rwlock_unlock(&doc->lock);
     return subdoc;
 }
@@ -206,19 +237,27 @@ int document_delete_path(Document doc, const char *path, uint64_t global_version
     }
     if (!parent || !final_key) { free(final_key); return -1; }
 
+    /* First check existence under read lock */
     if (pthread_rwlock_rdlock(&parent->lock) != 0) {
         free(final_key);
         return -1;
     }
-    Field f = hashmap_get(parent->fields, final_key, 0);
+    Entry e = hashmap_find_entry(parent->fields, final_key);
     pthread_rwlock_unlock(&parent->lock);
 
-    if (!f) {
+    if (!e) {
         free(final_key);
         return 0; /* nothing to delete */
     }
 
-    int rc = field_delete(f, global_version);
+    /* Add tombstone version under write lock */
+    if (pthread_rwlock_wrlock(&parent->lock) != 0) {
+        free(final_key);
+        return -1;
+    }
+    /* store DELETED sentinel; pass NULL as free callback so sentinel isn't freed */
+    int rc = hashmap_put(parent->fields, final_key, DELETED, global_version, NULL);
+    pthread_rwlock_unlock(&parent->lock);
     free(final_key);
     return rc;
 }
@@ -229,7 +268,7 @@ int document_delete_path(Document doc, const char *path, uint64_t global_version
  *   v1: <value>
  *   v2: <value>
  *
- * Note: this helper assumes values are printable C-strings for CLI convenience.
+ * Assumes values are printable C-strings (or DELETED sentinel).
  */
 int document_list_versions(Document doc, const char *path) {
     if (!doc || !path) return -1;
@@ -241,36 +280,35 @@ int document_list_versions(Document doc, const char *path) {
         return -1;
     }
 
+    if (!parent) { free(final_key); return -1; }
+
     if (pthread_rwlock_rdlock(&parent->lock) != 0) {
         free(final_key);
         return -1;
     }
-    Field f = hashmap_get(parent->fields, final_key, 0);
-    pthread_rwlock_unlock(&parent->lock);
 
-    if (!f) {
+    Entry e = hashmap_find_entry(parent->fields, final_key);
+    if (!e) {
+        pthread_rwlock_unlock(&parent->lock);
         fprintf(stderr, "document_list_versions: field not found: %s\n", path);
         free(final_key);
         return -1;
     }
 
-    if (pthread_rwlock_rdlock(&f->lock) != 0) {
-        free(final_key);
-        return -1;
-    }
-    VersionNode curr = f->versions;
+    /* e->value is the head VersionNode for that key (hashmap stores VersionNode chains) */
+    VersionNode curr = (VersionNode)e->value;
     while (curr) {
         /* print 1-based "v1, v2" numbering and a space after colon to match README/tests */
         if (curr->value == DELETED) {
-            printf("v%llu: <deleted>\n", (unsigned long long)(curr->local_version + 1));
+            printf("v%llu: <deleted>\n", (unsigned long long)(curr->local_version));
         } else {
             char *s = (char *)curr->value;
-            if (s) printf("v%llu: %s\n", (unsigned long long)(curr->local_version + 1), s);
-            else printf("v%llu: <nil>\n", (unsigned long long)(curr->local_version + 1));
+            if (s) printf("v%llu: %s\n", (unsigned long long)(curr->local_version), s);
+            else printf("v%llu: <nil>\n", (unsigned long long)(curr->local_version));
         }
         curr = curr->prev;
     }
-    pthread_rwlock_unlock(&f->lock);
+    pthread_rwlock_unlock(&parent->lock);
 
     free(final_key);
     return 0;

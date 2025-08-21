@@ -77,13 +77,20 @@ static int hashmap_rehash(Hashmap map, uint64_t new_bucket_count) {
 int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *)) {
     if (!map || !key || !value) return -1;
 
+    /* If inserting one more would exceed load factor, try to grow first */
+    if ((double)(map->size + 1) / (double)map->bucket_count > LOAD_FACTOR) {
+        /* ignore rehash failure and continue */
+        (void)hashmap_rehash(map, map->bucket_count * 2);
+    }
+
     uint64_t index = hash(key) % map->bucket_count;
     Entry current = map->buckets[index];
 
+    /* If key exists, prepend a new VersionNode to its chain */
     while (current) {
         if (strcmp(current->key, key) == 0) {
             VersionNode old_head = (VersionNode)current->value;
-            uint64_t local_version = old_head ? old_head->local_version + 1 : 0;
+            uint64_t local_version = old_head ? old_head->local_version + 1 : 1;
             VersionNode new_head = version_node_create(value, global_version, local_version, old_head, free_value);
             if (!new_head) return -1;
             current->value = new_head;
@@ -91,9 +98,9 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
         }
         current = current->next;
     }
-    
-    // MID: Entry with key doesn't exist
-    VersionNode new_head = version_node_create(value, global_version, 0, NULL, free_value);
+
+    /* Key not found: create new entry with local_version = 1 */
+    VersionNode new_head = version_node_create(value, global_version, 1, NULL, free_value);
     if (!new_head) return -1;
 
     Entry new_entry = malloc(sizeof(struct Entry));
@@ -109,21 +116,16 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
         return -1;
     }
 
+    /* Recompute index in case rehash changed bucket_count earlier */
+    index = hash(key) % map->bucket_count;
     new_entry->value = new_head;
     new_entry->next = map->buckets[index];
     map->buckets[index] = new_entry;
     map->size++;
 
-    // check load factor and grow if necessary
-    if ((double)map->size / map->bucket_count > LOAD_FACTOR) {
-        if (hashmap_rehash(map, map->bucket_count * 2) != 0) {
-            return -1;
-        }
-    }
-
     return 0;
-
 }
+
 // POST: We have put an Entry(VersionNode(value)) to the right bucket
 
 // A bit inefficient for now ig but how to make faster idk (maybe iterators)
@@ -136,6 +138,12 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     while (current) {
         if (strcmp(current->key, key) == 0) {
             VersionNode head = (VersionNode)current->value;
+
+            /* Treat local_version == 0 as "latest" for backward compatibility. */
+            if (local_version == 0) {
+                return head ? head->value : NULL;
+            }
+
             while (head && head->local_version >= local_version) {
                 if (head->local_version == local_version) {
                     return head->value;
@@ -149,4 +157,5 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
 
     return NULL;
 }
+
 

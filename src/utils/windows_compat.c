@@ -1,3 +1,4 @@
+/*
 #include "windows_compat.h"
 
 int pthread_rwlock_init(pthread_rwlock_t *lock, void *attr) {
@@ -27,3 +28,4 @@ int pthread_rwlock_destroy(pthread_rwlock_t *lock) {
     // Nothing to do for SRWLOCK
     return 0;
 }
+*/

@@ -1,3 +1,4 @@
+/*
 #pragma once
 
 #include <stddef.h>
@@ -12,3 +13,5 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock);
 int pthread_rwlock_wrlock(pthread_rwlock_t *lock);
 int pthread_rwlock_unlock(pthread_rwlock_t *lock);
 int pthread_rwlock_destroy(pthread_rwlock_t *lock);
+
+*/

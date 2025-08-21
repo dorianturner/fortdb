@@ -49,7 +49,7 @@ int decode_and_execute(Document root, Instr instr) {
                 return 0;
             }
 
-            printf("%s\n", val);
+            printf("string:%s\n", val);
             return 0;
         }
 
