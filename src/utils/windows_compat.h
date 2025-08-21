@@ -1,7 +1,9 @@
-/*
 #pragma once
 
 #include <stddef.h>
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 #include <windows.h>
 
 // Type aliases so pthread-like names exist on Windows
@@ -14,4 +16,10 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock);
 int pthread_rwlock_unlock(pthread_rwlock_t *lock);
 int pthread_rwlock_destroy(pthread_rwlock_t *lock);
 
-*/
+// --- pthread_mutex_t replacement ---
+typedef CRITICAL_SECTION pthread_mutex_t;
+
+int pthread_mutex_init(pthread_mutex_t *mutex, void *attr);
+int pthread_mutex_lock(pthread_mutex_t *mutex);
+int pthread_mutex_unlock(pthread_mutex_t *mutex);
+int pthread_mutex_destroy(pthread_mutex_t *mutex);
