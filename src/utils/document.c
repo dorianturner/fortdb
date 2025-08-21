@@ -8,7 +8,6 @@
 #include "field.h"
 #include "hash.h"
 #include "document.h"
-#include "common.h"
 
 #define DEFAULT_BUCKET_COUNT 16
 
