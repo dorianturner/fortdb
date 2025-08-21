@@ -4,6 +4,8 @@
 #include "hash.h"
 #include "version_node.h"
 
+#define LOAD_FACTOR 0.75
+
 // FNV-1a hashing, see wikipedia
 static uint64_t hash(const char *key) {
     uint64_t hash = 14695981039346656037ULL;
@@ -49,6 +51,28 @@ void hashmap_free(Hashmap map) {
     free(map);
 }
 
+static int hashmap_rehash(Hashmap map, uint64_t new_bucket_count) {
+    Entry *new_buckets = calloc(new_bucket_count, sizeof(Entry));
+    if (!new_buckets) return -1;
+
+    for (uint64_t i = 0; i < map->bucket_count; i++) {
+        Entry current = map->buckets[i];
+        while (current) {
+            Entry next = current->next;
+            uint64_t index = hash(current->key) % new_bucket_count;
+            current->next = new_buckets[index];
+            new_buckets[index] = current;
+            current = next;
+        }
+    }
+
+    free(map->buckets);
+    map->buckets = new_buckets;
+    map->bucket_count = new_bucket_count;
+    return 0;
+}
+
+
 // PRE: Entrys contain version nodes
 int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_version, void (free_value)(void *)) {
     if (!map || !key || !value) return -1;
@@ -90,7 +114,15 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
     map->buckets[index] = new_entry;
     map->size++;
 
+    // check load factor and grow if necessary
+    if ((double)map->size / map->bucket_count > LOAD_FACTOR) {
+        if (hashmap_rehash(map, map->bucket_count * 2) != 0) {
+            return -1;
+        }
+    }
+
     return 0;
+
 }
 // POST: We have put an Entry(VersionNode(value)) to the right bucket
 
