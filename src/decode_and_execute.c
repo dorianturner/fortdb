@@ -7,13 +7,6 @@
 #include "ir.h"
 #include "document.h"
 
-/* Robust decode+execute for new document API:
- * - SET uses document_set_field_path(...) and prints "OK" on success
- * - GET requests a particular local-version via document_get_field(...)
- *   (tombstone or missing -> "Value not found.")
- * - LOAD/SAVE/COMPACT/VERSIONS/DELETE print the single user-facing messages expected
- */
-
 int decode_and_execute(Document root, Instr instr) {
     if (!instr) return -1;
     int ret;
@@ -34,16 +27,8 @@ int decode_and_execute(Document root, Instr instr) {
             return 0;
 
         case GET: {
-            /* document_get_field returns:
-             *  - pointer to string value (owned by version system),
-             *  - ((char*)1) as tombstone sentinel,
-             *  - NULL if not found.
-             */
             char *val = document_get_field(root, instr->get.path, instr->get.version);
 
-            /* Treat NULL and tombstone as "not found". If you want fallback-to-latest
-             * behaviour, add document_get_field_latest(...) or make document_get_field
-             * interpret a special version (e.g. UINT64_MAX) as "latest". */
             if (!val || val == (char*)1) {
                 printf("Value not found.\n");
                 return 0;
