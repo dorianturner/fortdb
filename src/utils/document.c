@@ -3,9 +3,9 @@
 #if defined(_WIN32)
 #include "windows_compat.h"
 #else
-#include <pthread.h>
-#endif
 
+#endif
+#include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -315,4 +315,3 @@ int document_save(Document doc, const char *filename, const char *path) {
     (void)doc; (void)filename; (void)path;
     return 0;
 }
-
