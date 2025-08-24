@@ -38,6 +38,7 @@ int document_set_subdocument(Document doc, const char *key, Document subdoc, uin
 
 // Path ops
 int document_delete_path(Document doc, const char *path, uint64_t global_version);
+char *document_get_path(Document doc, const char *path, uint64_t local_version);
 int document_list_versions(Document doc, const char *path);
 
 // Stubs rn

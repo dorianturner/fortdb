@@ -4,6 +4,11 @@
 #include "hash.h"
 #include "version_node.h"
 
+#ifndef DELETED
+#define DELETED ((void*)1)
+#endif
+
+
 #define LOAD_FACTOR 0.75
 
 // FNV-1a hashing
@@ -179,4 +184,78 @@ Entry hashmap_find_entry(Hashmap map, const char *key) {
         }
     }
     return NULL;
+}
+
+// Document get path helpers
+// Compat between UINT64 as latest vs expected 0, not ideal
+void *hashmap_get_version(Hashmap map, const char *key, uint64_t local_version) {
+    if (!map || !key) return NULL;
+    if (local_version == UINT64_MAX) return hashmap_get(map, key, 0); /* underlying uses 0 => latest */
+    return hashmap_get(map, key, local_version);
+}
+
+char **hashmap_collect_live_keys(Hashmap map, size_t *out_count) {
+    if (!map || !out_count) return NULL;
+    size_t cap = 16, n = 0;
+    char **arr = malloc(cap * sizeof(char*));
+    if (!arr) { *out_count = 0; return NULL; }
+
+    for (uint64_t i = 0; i < map->bucket_count; ++i) {
+        Entry e = map->buckets[i];
+        while (e) {
+            VersionNode vh = (VersionNode)e->value;
+            if (vh && vh->value != DELETED) {
+                if (n >= cap) {
+                    size_t nc = cap * 2;
+                    char **tmp = realloc(arr, nc * sizeof(char*));
+                    if (!tmp) {
+                        /* cleanup */
+                        for (size_t j = 0; j < n; ++j) free(arr[j]);
+                        free(arr);
+                        *out_count = 0;
+                        return NULL;
+                    }
+                    arr = tmp;
+                    cap = nc;
+                }
+                arr[n++] = strdup(e->key);
+            }
+            e = e->next;
+        }
+    }
+
+    if (n == 0) {
+        free(arr);
+        *out_count = 0;
+        return NULL;
+    }
+
+    char **sh = realloc(arr, n * sizeof(char*));
+    if (sh) arr = sh;
+    *out_count = n;
+    return arr;
+}
+
+char *hashmap_join_live_keys(Hashmap map) {
+    size_t count = 0;
+    char **keys = hashmap_collect_live_keys(map, &count);
+    if (!keys) return strdup(""); /* no live keys */
+
+    /* compute length (fast path) */
+    size_t total = 0;
+    for (size_t i = 0; i < count; ++i) total += strlen(keys[i]) + 2; /* comma+space */
+    char *out = malloc(total + 1);
+    if (!out) {
+        for (size_t i = 0; i < count; ++i) free(keys[i]);
+        free(keys);
+        return strdup("");
+    }
+    out[0] = '\0';
+    for (size_t i = 0; i < count; ++i) {
+        if (i) strcat(out, ", ");
+        strcat(out, keys[i]);
+    }
+    for (size_t i = 0; i < count; ++i) free(keys[i]);
+    free(keys);
+    return out;
 }

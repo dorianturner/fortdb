@@ -32,5 +32,10 @@ int hashmap_put(Hashmap map, const char *key, void *value, uint64_t global_versi
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version);
 int hashmap_set_raw(Hashmap map, const char *key, void *value_chain);
 Entry hashmap_find_entry(Hashmap map, const char *key);
+
+// Helpers for document get path
+void *hashmap_get_version(Hashmap map, const char *key, uint64_t local_version);
+char **hashmap_collect_live_keys(Hashmap map, size_t *out_count);
+char *hashmap_join_live_keys(Hashmap map);
 #endif
 

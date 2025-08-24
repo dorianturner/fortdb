@@ -27,7 +27,7 @@ int decode_and_execute(Document root, Instr instr) {
             return 0;
 
         case GET: {
-            char *val = document_get_field(root, instr->get.path, instr->get.version);
+            char *val = document_get_path(root, instr->get.path, instr->get.version);
 
             if (!val || val == (char*)1) {
                 printf("Value not found.\n");

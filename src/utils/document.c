@@ -287,6 +287,55 @@ int document_list_versions(Document doc, const char *path) {
     return 0;
 }
 
+char *document_get_path(Document doc, const char *path, uint64_t local_version) {
+    if (!doc || !path) return NULL;
+
+    Document parent = NULL;
+    char *final_key = NULL;
+    if (resolve_parent_and_key(doc, path, &parent, &final_key, 0, 0) != 0) return NULL;
+    if (!parent) { free(final_key); return NULL; }
+
+    if (pthread_rwlock_rdlock(&parent->lock) != 0) { free(final_key); return NULL; }
+
+    void *field_val = hashmap_get_version(parent->fields, final_key, local_version);
+    if (field_val) {
+        pthread_rwlock_unlock(&parent->lock);
+        free(final_key);
+        if (field_val == DELETED) return (char*)1; /* deleted sentinel */
+        return (char *)field_val; /* internal pointer (same as before) */
+    }
+
+    Document sub = (Document)hashmap_get_version(parent->subdocuments, final_key, local_version);
+    if (!sub || sub == (Document)DELETED) {
+        pthread_rwlock_unlock(&parent->lock);
+        free(final_key);
+        return NULL;
+    }
+
+    if (pthread_rwlock_rdlock(&sub->lock) != 0) {
+        pthread_rwlock_unlock(&parent->lock);
+        free(final_key);
+        return NULL;
+    }
+    pthread_rwlock_unlock(&parent->lock);
+
+    char *fields = hashmap_join_live_keys(sub->fields);
+    char *subs   = hashmap_join_live_keys(sub->subdocuments);
+
+    char *out;
+    if (asprintf(&out, "fields: %s\nsubdocuments: %s", fields ? fields : "", subs ? subs : "") < 0) {
+        out = NULL;
+    }
+
+    free(fields);
+    free(subs);
+
+    pthread_rwlock_unlock(&sub->lock);
+    free(final_key);
+    return out;
+}
+
+
 // STUBS
 int document_compact(Document doc, const char *path) {
     (void)doc; (void)path;
