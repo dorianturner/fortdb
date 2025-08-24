@@ -9,7 +9,7 @@
 #include "../src/utils/document.h"
 #include "../src/utils/version_node.h"
 
-#define TEST_FILE "test_human.db"
+#define TEST_FILE "test.fortdb"
 
 void print_test_result(const char *name, int passed) {
     printf("%s: %s\n", name, passed ? "PASSED" : "FAILED");
@@ -20,54 +20,62 @@ int main() {
     Document root_doc = document_create();
     if (!root_doc) return 1;
 
-    // Root-level fields with versions
-    document_set_field(root_doc, "name", "Alice Smith", 1);
-    document_set_field(root_doc, "name", "Alice S.", 2);  // short version
-    document_set_field(root_doc, "email", "alice@example.com", 1);
+    // Root fields
+    document_set_field(root_doc, "Name", "Alice", 1);
+    document_set_field(root_doc, "Name", "Alicia", 2);
+    document_set_field(root_doc, "Age", "30", 1);
+    document_set_field(root_doc, "Age", "31", 2);
+    document_set_field(root_doc, "Occupation", "Engineer", 1);
+    document_set_field(root_doc, "Occupation", "Senior Engineer", 2);
 
-    // Create subdoc1 for work info
-    Document work_doc = document_create();
-    document_set_field(work_doc, "company", "TechCorp", 1);
-    document_set_field(work_doc, "title", "Software Engineer", 1);
-    document_set_field(work_doc, "title", "Senior Software Engineer", 2);
+    // Nested Address
+    Document address = document_create();
+    document_set_subdocument(root_doc, "Address", address, 1);
+    document_set_field(address, "City", "Paris", 1);
+    document_set_field(address, "City", "Lyon", 2);
+    document_set_field(address, "Street", "1st Avenue", 1);
+    document_set_field(address, "Street", "2nd Avenue", 2);
 
-    // Create subsubdoc1 for office location inside work
-    Document office_doc = document_create();
-    document_set_field(office_doc, "building", "Main HQ", 1);
-    document_set_field(office_doc, "floor", "5", 1);
-    document_set_field(office_doc, "desk", "5B", 1);
-    document_set_subdocument(work_doc, "office", office_doc, 1);
+    // Nested Coordinates inside Address
+    Document coords = document_create();
+    document_set_subdocument(address, "Coordinates", coords, 1);
+    document_set_field(coords, "Latitude", "48.8566", 1);
+    document_set_field(coords, "Latitude", "45.7640", 2);
+    document_set_field(coords, "Longitude", "2.3522", 1);
+    document_set_field(coords, "Longitude", "4.8357", 2);
 
-    // Attach work_doc to root as subdoc1
-    document_set_subdocument(root_doc, "work_info", work_doc, 1);
+    // Nested Company subdocument
+    Document company = document_create();
+    document_set_subdocument(root_doc, "Company", company, 1);
+    document_set_field(company, "Name", "TechCorp", 1);
+    document_set_field(company, "Name", "TechCorp International", 2);
+    document_set_field(company, "Founded", "2000", 1);
+    document_set_field(company, "Founded", "2001", 2);
 
-    // Create subdoc2 for personal contacts
-    Document contacts_doc = document_create();
-    document_set_field(contacts_doc, "phone_mobile", "+1234567890", 1);
-    document_set_field(contacts_doc, "phone_home", "+0987654321", 1);
-
-    // Attach contacts_doc to root as subdoc2
-    document_set_subdocument(root_doc, "contacts", contacts_doc, 1);
-
-    // Optional: add a path field inside office_doc
-    document_set_field_path(root_doc, "work_info/office/parking_spot", "P12", 1);
+    // Even deeper subdocument: Company/Location
+    Document company_location = document_create();
+    document_set_subdocument(company, "Location", company_location, 1);
+    document_set_field(company_location, "City", "New York", 1);
+    document_set_field(company_location, "City", "San Francisco", 2);
+    document_set_field(company_location, "Country", "USA", 1);
+    document_set_field(company_location, "Country", "United States", 2);
 
     // Wrap in VersionNode
     VersionNode root = version_node_create(root_doc, 1, 1, NULL, (void(*)(void *))document_free);
     if (!root) return 1;
 
-    // Test some fields
-    char *val = document_get_field(root_doc, "name", UINT64_MAX);
-    print_test_result("Root name latest", val && strcmp(val, "Alice S.") == 0);
+    // Test some fields using correct names
+    char *val = document_get_field(root_doc, "Name", UINT64_MAX);
+    print_test_result("Root Name latest", val && strcmp(val, "Alicia") == 0);
 
-    Document got_work = document_get_subdocument(root_doc, "work_info", 0);
-    print_test_result("Get work_info", got_work != NULL);
+    val = document_get_field(address, "City", UINT64_MAX);
+    print_test_result("Address City latest", val && strcmp(val, "Lyon") == 0);
 
-    Document got_office = document_get_subdocument(root_doc, "work_info/office", 0);
-    print_test_result("Get office subdocument", got_office != NULL);
+    val = document_get_field(coords, "Latitude", UINT64_MAX);
+    print_test_result("Coordinates Latitude latest", val && strcmp(val, "45.7640") == 0);
 
-    val = document_get_field(root_doc, "work_info/office/parking_spot", UINT64_MAX);
-    print_test_result("Parking spot field", val && strcmp(val, "P12") == 0);
+    val = document_get_field(company_location, "Country", UINT64_MAX);
+    print_test_result("Company Location Country latest", val && strcmp(val, "United States") == 0);
 
     // Serialize
     if (serialize_db(root, TEST_FILE) != 0) {

@@ -50,17 +50,46 @@ int main(void) {
     // Create root document
     Document root_doc = document_create();
 
-    // Add fields with multiple versions
+    // Root fields
     document_set_field(root_doc, "Name", "Alice", 1);
     document_set_field(root_doc, "Name", "Alicia", 2);
     document_set_field(root_doc, "Age", "30", 1);
     document_set_field(root_doc, "Age", "31", 2);
+    document_set_field(root_doc, "Occupation", "Engineer", 1);
+    document_set_field(root_doc, "Occupation", "Senior Engineer", 2);
 
-    // Add nested subdocument
+    // Nested Address
     Document address = document_create();
     document_set_subdocument(root_doc, "Address", address, 1);
     document_set_field(address, "City", "Paris", 1);
     document_set_field(address, "City", "Lyon", 2);
+    document_set_field(address, "Street", "1st Avenue", 1);
+    document_set_field(address, "Street", "2nd Avenue", 2);
+
+    // Nested Coordinates inside Address
+    Document coords = document_create();
+    document_set_subdocument(address, "Coordinates", coords, 1);
+    document_set_field(coords, "Latitude", "48.8566", 1);
+    document_set_field(coords, "Latitude", "45.7640", 2);
+    document_set_field(coords, "Longitude", "2.3522", 1);
+    document_set_field(coords, "Longitude", "4.8357", 2);
+
+    // Nested Company subdocument
+    Document company = document_create();
+    document_set_subdocument(root_doc, "Company", company, 1);
+    document_set_field(company, "Name", "TechCorp", 1);
+    document_set_field(company, "Name", "TechCorp International", 2);
+    document_set_field(company, "Founded", "2000", 1);
+    document_set_field(company, "Founded", "2001", 2);
+
+    // Even deeper subdocument: Company/Location
+    Document company_location = document_create();
+    document_set_subdocument(company, "Location", company_location, 1);
+    document_set_field(company_location, "City", "New York", 1);
+    document_set_field(company_location, "City", "San Francisco", 2);
+    document_set_field(company_location, "Country", "USA", 1);
+    document_set_field(company_location, "Country", "United States", 2);
+
 
     // Wrap root document in a VersionNode
     VersionNode root_vnode = version_node_create(
