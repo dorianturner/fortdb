@@ -1,8 +1,12 @@
 .vscode/c_cpp_properties.json
 
+*.fortdb
+*.fort
+
 /src/*.o
 /src/fortdb
 /src/utils/*.o
+/src/\`
 
 /test/test_hash
 /test/test_version_node

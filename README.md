@@ -1,8 +1,6 @@
-# IN ACTIVE DEVELOPMENT : NOT FINISHED
-
 FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 
-** This is a WORK IN PROGRESS and is currently buggy etc. etc.**
+**This is a WORK IN PROGRESS and is currently buggy etc. etc.**
 
 **Interactive Shell Usage**
 
@@ -44,12 +42,16 @@ fortdb started. Type 'exit' or 'quit' to quit.
 fortdb> load db.fort
 Loaded database from db.fort
 fortdb> get users/alice/email
-string:alice@example.com
+alice@example.com
+fortdb> get users/alice 
+fields: name, age
+subdocuments: children
 fortdb> set users/alice/age 30
 OK
 fortdb> list-versions users/alice/age
-v1: 25
-v2: 30
+v3: 30
+v2: <deleted>
+v1: 29
 fortdb> compact users/alice
 Compacted users/alice
 fortdb> save db.fort
@@ -59,5 +61,5 @@ fortdb> exit
 
 5. **Getting Help**
 
-Type `help` or `?` at the prompt for command summaries.
+Type `help` at the prompt for command summaries.
 
