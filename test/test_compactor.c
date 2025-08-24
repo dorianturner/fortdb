@@ -21,6 +21,7 @@ void print_chain_lengths(const char *prefix, VersionNode node) {
 void print_doc_chains(Document doc, const char *prefix) {
     if (!doc) return;
 
+    // Fields
     for (uint64_t i = 0; i < doc->fields->bucket_count; i++) {
         Entry e = doc->fields->buckets[i];
         while (e) {
@@ -31,12 +32,14 @@ void print_doc_chains(Document doc, const char *prefix) {
         }
     }
 
+    // Subdocuments
     for (uint64_t i = 0; i < doc->subdocuments->bucket_count; i++) {
         Entry e = doc->subdocuments->buckets[i];
         while (e) {
             char buf[256];
             snprintf(buf, sizeof(buf), "%s/%s", prefix, e->key);
-            Document subdoc = (Document)((VersionNode)e->value)->value;
+            VersionNode subdoc_node = (VersionNode)e->value;
+            Document subdoc = (Document)subdoc_node->value;
             print_doc_chains(subdoc, buf);
             e = e->next;
         }
@@ -44,29 +47,41 @@ void print_doc_chains(Document doc, const char *prefix) {
 }
 
 int main(void) {
-    Document root = document_create();
+    // Create root document
+    Document root_doc = document_create();
 
-    // Create fields with multiple versions
-    document_set_field(root, "Name", "Alice", 1);
-    document_set_field(root, "Name", "Alicia", 2);
-    document_set_field(root, "Age", "30", 1);
-    document_set_field(root, "Age", "31", 2);
+    // Add fields with multiple versions
+    document_set_field(root_doc, "Name", "Alice", 1);
+    document_set_field(root_doc, "Name", "Alicia", 2);
+    document_set_field(root_doc, "Age", "30", 1);
+    document_set_field(root_doc, "Age", "31", 2);
 
-    // Nested subdocument
+    // Add nested subdocument
     Document address = document_create();
-    document_set_subdocument(root, "Address", address, 1);
+    document_set_subdocument(root_doc, "Address", address, 1);
     document_set_field(address, "City", "Paris", 1);
     document_set_field(address, "City", "Lyon", 2);
 
-    printf("Before compaction:\n");
-    print_doc_chains(root, "root");
+    // Wrap root document in a VersionNode
+    VersionNode root_vnode = version_node_create(
+        root_doc,               // value points to the Document
+        1,                      // global_version
+        1,                      // local_version
+        NULL,                   // no previous version
+        (void(*)(void *))document_free // free_value cleans up Document
+    );
 
-    // Compact starting at root vnode
-    compactor_compact((VersionNode)root);
+    printf("Before compaction:\n");
+    print_doc_chains((Document)root_vnode->value, "root");
+
+    // Compact starting at the root vnode
+    compactor_compact(root_vnode);
 
     printf("\nAfter compaction:\n");
-    print_doc_chains(root, "root");
+    print_doc_chains((Document)root_vnode->value, "root");
 
-    document_free(root);
+    // Free everything
+    version_node_free(root_vnode);
+
     return 0;
 }
