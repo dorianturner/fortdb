@@ -9,6 +9,7 @@ typedef enum {
     DELETE,
     VERSIONS,
     COMPACT,
+    COMPACT_DB,
     LOAD,
     SAVE
 } INSTR_TYPE;
@@ -38,6 +39,8 @@ struct Instr {
         } compact;
         struct {
             const char *path;
+        }compact_db;
+        struct {
         } load;
         struct {
             char *filename;
