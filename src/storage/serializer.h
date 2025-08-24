@@ -10,8 +10,9 @@ typedef struct VersionNode *VersionNode;
 struct Document;
 typedef struct Document *Document;
 
-/* Deleted marker pointer */
+#ifndef DELETED
 extern void * const DELETED;
+#endif
 
 /* Serialize the entire database root (VersionNode containing Document) to file atomically.
  * Returns 0 on success, -1 on failure.

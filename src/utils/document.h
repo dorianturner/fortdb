@@ -9,6 +9,10 @@
 #include <stdint.h>
 #include "hash.h"
 
+#ifndef DELETED
+#define DELETED ((void*)1)
+#endif
+
 typedef struct Document *Document;
 
 struct Document {

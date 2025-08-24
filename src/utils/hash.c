@@ -85,31 +85,21 @@ int hashmap_put(Hashmap map, const char *key, void *value,
     uint64_t index = hash(key) % map->bucket_count;
     Entry current  = map->buckets[index];
 
-    // Update existing key
+    /* Update existing key */
     while (current) {
         if (strcmp(current->key, key) == 0) {
-            VersionNode old_head    = (VersionNode)current->value;
-            uint64_t local_version  = old_head ? old_head->local_version + 1 : 1;
-            VersionNode new_head    = version_node_create(
-                                          value, global_version,
-                                          local_version, old_head, free_value);
+            VersionNode old_head   = (VersionNode)current->value;
+            uint64_t local_version = old_head ? old_head->local_version + 1 : 1;
+            VersionNode new_head = version_node_create(value, global_version,
+                                                       local_version, old_head, free_value);
             if (!new_head) return -1;
             current->value = new_head;
-
-            // serialization bookkeeping
-            map->datapoints++;
-            if (map->head) {
-                map->tail->prev = new_head;
-                map->tail       = new_head;
-            } else {
-                map->head = map->tail = new_head;
-            }
             return 0;
         }
         current = current->next;
     }
 
-    // Insert new key
+    /* Insert new key */
     VersionNode new_head = version_node_create(value, global_version, 1, NULL, free_value);
     if (!new_head) return -1;
 
@@ -126,22 +116,15 @@ int hashmap_put(Hashmap map, const char *key, void *value,
         return -1;
     }
 
-    index = hash(key) % map->bucket_count; // in case rehash happened
+    index = hash(key) % map->bucket_count; /* re-evaluate in case rehash occurred */
     new_entry->value = new_head;
     new_entry->next  = map->buckets[index];
     map->buckets[index] = new_entry;
     map->size++;
 
-    // serialization bookkeeping
-    map->datapoints++;
-    if (map->head) {
-        map->tail->prev = new_head;
-        map->tail       = new_head;
-    } else {
-        map->head = map->tail = new_head;
-    }
     return 0;
 }
+
 
 void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     if (!map || !key) return NULL;
@@ -170,7 +153,7 @@ void *hashmap_get(Hashmap map, const char *key, uint64_t local_version) {
     return NULL;
 }
 
-static int hashmap_set_raw(Hashmap map, const char *key, void *value_chain) {
+int hashmap_set_raw(Hashmap map, const char *key, void *value_chain) {
     if (!map || !key) return -1;
 
     uint64_t index = hash(key) % map->bucket_count;

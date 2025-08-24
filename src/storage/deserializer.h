@@ -3,7 +3,9 @@
 
 #include <stdio.h>
 #include <stdint.h>
-
+#ifndef DELETED
+extern void * const DELETED;
+#endif
 struct VersionNode;
 typedef struct VersionNode *VersionNode;
 

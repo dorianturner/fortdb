@@ -1,3 +1,5 @@
+# IN ACTIVE DEVELOPMENT : NOT FINISHED
+
 FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 
 ** This is a WORK IN PROGRESS and is currently buggy etc. etc.**
