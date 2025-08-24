@@ -26,3 +26,11 @@ void version_node_free(VersionNode head){
     }
 }
 
+void version_node_compact(VersionNode head) {
+    if (!head) return;
+    if (head->prev) {
+        version_node_free(head->prev);
+        head->prev = NULL;
+    }
+}
+
