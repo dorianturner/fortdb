@@ -21,19 +21,6 @@
 
 #define DEFAULT_BUCKET_COUNT 16
 
-// TODO: migrate to hash.c 
-static Entry hashmap_find_entry(Hashmap map, const char *key) {
-    if (!map || !key) return NULL;
-    for (uint64_t i = 0; i < map->bucket_count; i++) {
-        Entry e = map->buckets[i];
-        while (e) {
-            if (strcmp(e->key, key) == 0) return e;
-            e = e->next;
-        }
-    }
-    return NULL;
-}
-
 // Memory management
 Document document_create(void) {
     Document doc = malloc(sizeof(struct Document));
