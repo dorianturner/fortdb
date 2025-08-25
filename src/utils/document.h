@@ -46,5 +46,12 @@ int document_compact(Document doc, const char *path);
 int document_load(Document doc, const char *path);
 int document_save(Document doc, const char *filename, const char *path);
 
+// Path traversal helpers
+int resolve_parent_and_key(Document root,
+                                  const char *path,
+                                  Document *out_parent,
+                                  char **out_key,
+                                  int create_missing,
+                                  uint64_t global_version);
 #endif
 

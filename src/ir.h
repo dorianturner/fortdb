@@ -19,33 +19,42 @@ struct Instr {
     INSTR_TYPE instr_type;
     uint64_t global_version;
     union {
+        
         struct {
             char *value;
             const char *path;
         } set;
+
         struct {
             char *key;
             const char *path;
             int version;
         } get;
+
         struct {
             const char *path;
         } delete;
+
         struct {
             const char *path;
         } versions;
+
         struct {
             const char *path;
         } compact;
+
+        struct {
+        }compact_db;
+
         struct {
             const char *path;
-        }compact_db;
-        struct {
         } load;
+
         struct {
             char *filename;
             const char *path;
         } save;
+
     };
 };
 

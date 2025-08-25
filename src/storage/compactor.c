@@ -4,15 +4,18 @@
 #include "../utils/hash.h"
 
 // Recursively compact a document
-static void compact_document(Document doc) {
-    if (!doc) return;
+static int compact_document(Document doc) {
+    if (!doc) return 1;  // fail if doc is NULL
 
     // Compact all fields
     for (uint64_t i = 0; i < doc->fields->bucket_count; i++) {
         Entry e = doc->fields->buckets[i];
         while (e) {
             VersionNode v = (VersionNode)e->value;
-            version_node_compact(v);
+
+            int ret = version_node_compact(v);
+            if (ret != 0) return 1;  // fail if compaction fails
+
             e = e->next;
         }
     }
@@ -22,24 +25,39 @@ static void compact_document(Document doc) {
         Entry e = doc->subdocuments->buckets[i];
         while (e) {
             VersionNode v = (VersionNode)e->value;
-            version_node_compact(v);
+
+            int ret = version_node_compact(v);
+            if (ret != 0) return 1;  // fail if compaction fails
 
             Document subdoc = (Document)v->value;
-            compact_document(subdoc);
+            if (subdoc) {
+                ret = compact_document(subdoc);
+                if (ret != 0) return 1;  // fail if recursive compaction fails
+            }
 
             e = e->next;
         }
     }
+
+    return 0;  // success
 }
 
+
 // Compact starting at a root VersionNode
-void compactor_compact(VersionNode root) {
-    if (!root) return;
+int compactor_compact(VersionNode root) {
+    if (!root) return 1;  // fail if root is NULL
 
     // Compact the root itself
-    version_node_compact(root);
+    int ret = version_node_compact(root);
+    if (ret != 0) return 1; // fail if version_node_compact fails
 
     // If root points to a Document, compact all its fields/subdocs
     Document doc = (Document)root->value;
-    compact_document(doc);
+    if (doc) {
+        ret = compact_document(doc);
+        if (ret != 0) return 1; // fail if compact_document fails
+    }
+
+    return 0; // success
 }
+

@@ -58,7 +58,7 @@ void document_free(Document doc) {
 }
 
 // Path traversal helpers
-static int resolve_parent_and_key(Document root,
+int resolve_parent_and_key(Document root,
                                   const char *path,
                                   Document *out_parent,
                                   char **out_key,

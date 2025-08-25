@@ -1,10 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "document.h"
+#include "./utils/document.h"
+#include "./utils/version_node.h"
+#include "./utils/hash.h"
+#include "./storage/compactor.h"
+#include "./storage/deserializer.h"
+#include "./storage/serializer.h"
 #include "ir.h"
 #include "parser.h"
 #include "decode_and_execute.h"
+
 
 #define INPUT_BUFFER_SIZE 1024
 #define MAX_ARGS 32
@@ -14,14 +20,15 @@ static void print_help(void) {
 "fortdb - interactive help\n"
 "\n"
 "Supported Commands\n"
-"  load <path>                load /home/me/db.fort       Load database from file\n"
-"  get <path> [--v=<V>]      get users/john/age           Fetch field value (optional local version V)\n"
-"  set <path> <value>        set users/john/age 42       Insert or update field\n"
-"  delete <path>             delete users/john/age       Tombstone an entity\n"
-"  list-versions <path>      list-versions users/john/age  List all versions of an entity\n"
-"  compact <path>            compact users/john          Retain only latest versions, remove tombstones\n"
-"  save <path>               save /home/me/db.fort       Save current in-memory DB to file\n"
-"  exit, quit                exit                        Exit the interactive shell\n"
+"  load <path>               load /home/me/db.fort          Load database from file\n"
+"  get <path> [--v=<V>]      get users/john/age             Fetch field value (optional local version V)\n"
+"  set <path> <value>        set users/john/age 42          Insert or update field\n"
+"  delete <path>             delete users/john/age          Tombstone an entity\n"
+"  list-versions <path>      list-versions users/john/age   List all versions of an entity\n"
+"  compact <path>            compact users/john             Retain only latest versions, remove tombstones\n"
+"  compact_db                compact_db                     Compact entire database\n"
+"  save <path>               save /home/me/db.fort          Save current in-memory DB to file\n"
+"  exit, quit                exit                           Exit the interactive shell\n"
 "  help, ?                   show this help message\n"
 "\n"
 "Key Features\n"
@@ -56,7 +63,8 @@ static void print_help(void) {
 }
 
 int main(void) {
-    Document root = document_create();
+    Document d_root = document_create();
+    VersionNode root = version_node_create(d_root, 0, 0, NULL, (void(*)(void *))document_free);
     if (!root) {
         fprintf(stderr, "Failed to initialize database.\n");
         return 1;
@@ -106,7 +114,7 @@ int main(void) {
         global_version++;
     }
 
-    document_free(root);
+    version_node_free(root);
     return 0;
 }
 

@@ -6,7 +6,9 @@
 #include "decode_and_execute.h"
 #include "ir.h"
 #include "document.h"
-
+#include "./storage/compactor.h"
+#include "./storage/deserializer.h"
+#include "./storage/serializer.h"
 int decode_and_execute(VersionNode v_root, Instr instr) {
     if (!instr) return -1;
     int ret;
@@ -60,8 +62,8 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
         
         case COMPACT:
             //root is a vnode
-
-            ret = version_node_compact(v_root);
+            VersionNode node = find_version_node_by_path(v_root, instr->compact.path);
+            ret = version_node_compact(node);
 
             if (ret != 0) {
                 fprintf(stderr, "version_node_compact: %d\n", ret);

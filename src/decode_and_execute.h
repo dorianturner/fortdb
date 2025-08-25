@@ -4,6 +4,6 @@
 #include "ir.h"
 #include "document.h"
 
-int decode_and_execute(Document root, Instr instr);
+int decode_and_execute(VersionNode root, Instr instr);
 
 #endif

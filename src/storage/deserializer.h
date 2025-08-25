@@ -16,7 +16,7 @@ typedef struct Document *Document;
  * Returns 0 on success, -1 on failure.
  * On success, `*root` will point to the reconstructed version chain.
  */
-int deserialize_db(const char *filename, VersionNode *root_out);
+int deserialize_db(const char *filename, VersionNode root_out);
 
 /* Deserialize a Document from an open FILE*.
  * Returns 0 on success, -1 on failure.
@@ -28,6 +28,6 @@ int deserialize_document(Document *doc_out, FILE *file);
  * Handles string, tombstone, and Document payloads.
  * Returns 0 on success, -1 on failure.
  */
-int deserialize_version_node(VersionNode *ver_out, FILE *file);
+int deserialize_version_node(VersionNode ver_out, FILE *file);
 
 #endif /* DESERIALIZER_H */

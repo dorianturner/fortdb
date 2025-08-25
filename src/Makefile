@@ -1,36 +1,39 @@
-CC         := gcc
-PKG_CONFIG := pkg-config
-PKG_LIBS   :=
+# Makefile for fortdb
+CC=gcc
+CFLAGS=-g -Wall -Wextra -std=c11 -D_POSIX_C_SOURCE=200809L
+CPPFLAGS=-I./src -I./src/utils -I./src/storage
+LDFLAGS=-pthread
 
-PKG_CFLAGS  := $(if $(PKG_LIBS),$(shell $(PKG_CONFIG) --cflags $(PKG_LIBS)),)
-PKG_LDFLAGS := $(if $(PKG_LIBS),$(shell $(PKG_CONFIG) --libs $(PKG_LIBS)),)
+# Path to CLI file with main()
+CLI_MAIN ?= src/fortdb.c
 
-# Detect Windows vs POSIX
-ifeq ($(OS),Windows_NT)
-	CFLAGS   := -DWIN32 -Wall -Wextra -std=c11 $(PKG_CFLAGS) -I. -Iutils
-	LDFLAGS  := $(PKG_LDFLAGS)
-	RM       := del /Q
-else
-	CFLAGS   := -D_POSIX_C_SOURCE=200112L -Wall -Wextra -std=c11 -pthread $(PKG_CFLAGS) -I. -Iutils
-	LDFLAGS  := -pthread $(PKG_LDFLAGS)
-	RM       := rm -f
-endif
+UTIL_SRCS := $(wildcard src/utils/*.c)
+STOR_SRCS := $(wildcard src/storage/*.c)
+CORE_SRCS := $(filter-out $(CLI_MAIN),$(wildcard src/*.c))
+APP_SRCS  := $(CLI_MAIN) $(UTIL_SRCS) $(STOR_SRCS) $(CORE_SRCS)
+OBJS      := $(APP_SRCS:.c=.o)
+TARGET    := fortdb
 
-SRC_ALL  := $(wildcard *.c) $(wildcard utils/*.c)
-SRC      := $(filter-out utils/windows_compat.c, $(SRC_ALL))
-OBJ      := $(SRC:.c=.o)
-TARGET   := fortdb
-
-.PHONY: all clean
+.PHONY: all clean test
 
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
-	$(CC) $(OBJ) -o $@ $(LDFLAGS)
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+# Test binary from known-good command
+TEST_SRCS := test/test_serialize.c \
+             src/storage/serializer.c \
+             src/utils/document.c \
+             src/utils/version_node.c \
+             src/utils/hash.c
+TEST_OBJS := $(TEST_SRCS:.c=.o)
+
+test_serialize: $(TEST_OBJS)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 clean:
-	$(RM) $(OBJ) $(TARGET)
-
+	rm -f $(TARGET) test_serialize $(OBJS) $(TEST_OBJS)

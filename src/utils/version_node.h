@@ -22,5 +22,8 @@ VersionNode version_node_create(void *value,
         void (*free_value)(void *));
 
 void version_node_free(VersionNode head);
-void version_node_compact(VersionNode head);
+int version_node_compact(VersionNode head);
+
+VersionNode find_version_node_by_path(VersionNode root, const char *path);
+
 #endif

@@ -38,7 +38,7 @@
 static const uint32_t FORMAT_VER = 1;
 
 
-int deserialize_db(const char *filename, VersionNode *root_out) {
+int deserialize_db(const char *filename, VersionNode root_out) {
     if (!filename || !root_out) return -1;
 
     FILE *f = fopen(filename, "rb");
@@ -66,7 +66,7 @@ int deserialize_db(const char *filename, VersionNode *root_out) {
     VersionNode head = NULL, tail = NULL;
     for (uint64_t i = 0; i < ver_count; i++) {
         VersionNode ver = NULL;
-        if (deserialize_version_node(&ver, f) != 0) goto fail;
+        if (deserialize_version_node(ver, f) != 0) goto fail;
 
         ver->prev = NULL;
         if (!head) {
@@ -78,12 +78,12 @@ int deserialize_db(const char *filename, VersionNode *root_out) {
     }
 
     fclose(f);
-    *root_out = head;
+    root_out = head;
     return 0;
 
     fail:
         if (f) fclose(f);
-        *root_out = NULL;
+        root_out = NULL;
         return -1;
 }
 
@@ -119,7 +119,7 @@ int deserialize_document(Document *doc_out, FILE *file) {
 
         for (uint64_t v = 0; v < ver_count; v++) {
             VersionNode ver = NULL;
-            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            if (deserialize_version_node(ver, file) != 0) { free(key); goto fail; }
 
             ver->prev = NULL; /* will be set by appending logic */
 
@@ -156,7 +156,7 @@ int deserialize_document(Document *doc_out, FILE *file) {
         VersionNode tail = NULL;
         for (uint64_t v = 0; v < ver_count; v++) {
             VersionNode ver = NULL;
-            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            if (deserialize_version_node(ver, file) != 0) { free(key); goto fail; }
             ver->prev = NULL;
             if (!head) head = tail = ver;
             else { tail->prev = ver; tail = ver; }
@@ -176,7 +176,7 @@ int deserialize_document(Document *doc_out, FILE *file) {
 
 
 /* Fixed: set free_value for subdocuments (document_free) */
-int deserialize_version_node(VersionNode *ver_out, FILE *file) {
+int deserialize_version_node(VersionNode ver_out, FILE *file) {
     if (!ver_out || !file) return -1;
 
     uint64_t be64;
@@ -233,7 +233,7 @@ int deserialize_version_node(VersionNode *ver_out, FILE *file) {
         return -1;
     }
 
-    *ver_out = node;
+    ver_out = node;
     return 0;
 }
 
