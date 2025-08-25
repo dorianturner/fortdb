@@ -10,6 +10,3 @@
 
 /test/test_hash
 /test/test_version_node
-/test/test_field
-/test/test_document
-/test/test_database

@@ -1,7 +1,4 @@
 FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
-
-**This is a WORK IN PROGRESS and is currently buggy etc. etc.**
-
 **Interactive Shell Usage**
 
 1. **Start FortDB**
@@ -14,22 +11,25 @@ FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
 
 2. **Supported Commands**
 
-   | Command                     | Example                        | Description                                     |
-   | --------------------------- | ------------------------------ | ----------------------------------------------- |
-   | `load <path>`               | `load /home/me/db.fort`        | Load database from file                         |
-   | `get <path> [--v=<V>]`      | `get users/john/age`           | Fetch field value (optional global version `V`) |
-   | `set <path> <value>`        | `set users/john/age 42`        | Insert or update field                          |
-   | `delete <path>`             | `delete users/john/age`        | Tombstone an entity                             |
-   | `list-versions <path>`      | `list-versions users/john/age` | List all versions of an entity                  |
-   | `compact <path>`            | `compact users/john`           | Retain only latest versions, remove tombstones  |
-   | `save <path>`               | `save /home/me/db.fort`        | Save current in-memory DB to file               |
-   | `exit` or `quit`            | `exit`                         | Exit the interactive shell                      |
+   | Command                | Example                        | Description                                    |
+   | ---------------------- | ------------------------------ | ---------------------------------------------- |
+   | `load <path>`          | `load /home/me/db.fort`        | Load database from file                        |
+   | `get <path> [--v=<V>]` | `get users/john/age`           | Fetch field value (optional local version `V`) |
+   | `set <path> <value>`   | `set users/john/age 42`        | Insert or update field                         |
+   | `delete <path>`        | `delete users/john/age`        | Tombstone an entity                            |
+   | `list-versions <path>` | `list-versions users/john/age` | List all versions of an entity                 |
+   | `compact <path>`       | `compact users/john`           | Retain only latest versions, remove tombstones |
+   | `compact_db`           | `compact_db`                   | Compact entire database                        |
+   | `save <path>`          | `save ./test/saves/db.fort`    | Save current in-memory DB to file              |
+   | `exit`, `quit`         | `exit`                         | Exit the interactive shell                     |
+   | `dump`                 | `dump`                         | Print the entire database state to the console |
+   | `help`, `?`            | `help`                         | Show this help message                         |
 
 3. **Key Features**
 
 * **Append-only writes**: SET/DELETE always append; no in-place updates, ensuring crash safety.
-* **Hierarchical versioning**: VersionNode chains at Table, Collection, Document, and Field levels.
-* **Global & local versions**: `uint64_t` counters track DB-wide and per-entity changes.
+* **Hierarchical versioning**: VersionNode chains at every level.
+* **Local versions**: `uint64_t` counters track per-entity changes.
 * **Time-travel reads**: Query any historical state with `--v` flag.
 * **Atomic compaction**: Background process compacts data and swaps files atomically.
 * **Thread-safe**: RW-locks on structures and global mutex for version counter.
