@@ -19,7 +19,7 @@ struct Instr {
     INSTR_TYPE instr_type;
     uint64_t global_version;
     union {
-        
+
         struct {
             char *value;
             const char *path;

@@ -1,33 +1,36 @@
 #ifndef DESERIALIZER_H
 #define DESERIALIZER_H
 
-#include <stdio.h>
 #include <stdint.h>
-#ifndef DELETED
-extern void * const DELETED;
-#endif
-struct VersionNode;
-typedef struct VersionNode *VersionNode;
+#include <stdio.h>
+#include "version_node.h"
+#include "document.h"
 
-struct Document;
-typedef struct Document *Document;
-
-/* Deserialize the entire database from a file into a VersionNode root.
- * Returns 0 on success, -1 on failure.
- * On success, `*root` will point to the reconstructed version chain.
+/**
+ * Deserialize an entire database from a file.
+ * 
+ * @param filename Path to the serialized file.
+ * @param root_out Pointer to a VersionNode* that will be overwritten with the root chain.
+ * @return 0 on success, -1 on failure.
  */
-int deserialize_db(const char *filename, VersionNode root_out);
+int deserialize_db(const char *filename, VersionNode *root_out);
 
-/* Deserialize a Document from an open FILE*.
- * Returns 0 on success, -1 on failure.
- * Reconstructs fields and subdocuments recursively.
+/**
+ * Deserialize a single VersionNode from a file.
+ * 
+ * @param ver_out Pointer to a VersionNode* that will be allocated and returned.
+ * @param file Open FILE* to read from.
+ * @return 0 on success, -1 on failure.
+ */
+int deserialize_version_node(VersionNode *ver_out, FILE *file);
+
+/**
+ * Deserialize a Document (with its fields and subdocuments) from a file.
+ * 
+ * @param doc_out Pointer to a Document* that will be allocated and returned.
+ * @param file Open FILE* to read from.
+ * @return 0 on success, -1 on failure.
  */
 int deserialize_document(Document *doc_out, FILE *file);
-
-/* Deserialize a single VersionNode from an open FILE*.
- * Handles string, tombstone, and Document payloads.
- * Returns 0 on success, -1 on failure.
- */
-int deserialize_version_node(VersionNode ver_out, FILE *file);
 
 #endif /* DESERIALIZER_H */
