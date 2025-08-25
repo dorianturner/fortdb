@@ -11,7 +11,8 @@ typedef enum {
     COMPACT,
     COMPACT_DB,
     LOAD,
-    SAVE
+    SAVE,
+    DUMP
 } INSTR_TYPE;
 
 typedef struct Instr *Instr;
@@ -45,6 +46,9 @@ struct Instr {
 
         struct {
         }compact_db;
+
+        struct {
+        }dump;
 
         struct {
             const char *path;

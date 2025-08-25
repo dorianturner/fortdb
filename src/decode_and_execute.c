@@ -9,6 +9,7 @@
 #include "./storage/compactor.h"
 #include "./storage/deserializer.h"
 #include "./storage/serializer.h"
+#include "./utils/visualiser.h"
 int decode_and_execute(VersionNode v_root, Instr instr) {
     if (!instr) return -1;
     int ret;
@@ -84,17 +85,30 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
             printf("Compacted %s\n", instr->compact.path ? instr->compact.path : "");
             return 0;
 
-        case LOAD:
-            //filename, root node
-            
-            ret = deserialize_db(instr->load.path, v_root);
-
-            if (ret != 0) {
+        case LOAD: {
+            // Deserialize into a temporary VersionNode pointer
+            VersionNode new_root = NULL;
+            int ret = deserialize_db(instr->load.path, &new_root);
+            if (ret != 0 || !new_root) {
                 fprintf(stderr, "Error in deserialize_db: %d\n", ret);
                 return ret;
             }
-            printf("Loaded database from %s\n", instr->load.path ? instr->load.path : "");
+
+            // Free old document
+            Document old_doc = (Document)v_root->value;
+            if (old_doc) document_free(old_doc);
+
+            // Replace current root document with loaded one
+            v_root->value = new_root->value;
+            new_root->value = NULL; // prevent double-free
+
+            // Free temporary VersionNode chain except the first node
+            version_node_free(new_root->prev);
+
+            printf("Successfully loaded database from '%s'\n", instr->load.path);
             return 0;
+        }
+
 
         case SAVE:
         //root, filename
@@ -122,6 +136,10 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
             }
             printf("Saved database to %s\n", instr->save.filename ? instr->save.filename : "");
             return 0;
+
+        case DUMP:
+            visualize_db(v_root);
+        return 0;
 
         default:
             fprintf(stderr, "Unknown instruction type.\n");

@@ -18,6 +18,7 @@ Instr parse_args(int argc, char *args[], uint64_t global_version) {
     else if (strcmp(args[0], "load") == 0)           op = LOAD;
     else if (strcmp(args[0], "save") == 0)           op = SAVE;
     else if (strcmp(args[0], "compact_db") == 0)     op = COMPACT_DB;
+    else if (strcmp(args[0], "dump") == 0)           op = DUMP;
     else return NULL;
 
     Instr instr = malloc(sizeof *instr);
@@ -62,6 +63,10 @@ Instr parse_args(int argc, char *args[], uint64_t global_version) {
       case LOAD:
         if (argc != 2) { free(instr); return NULL; }
         instr->load.path = args[1];
+        break;
+
+      case DUMP:
+        if (argc != 1) { free(instr); return NULL; }
         break;
 
       case SAVE:
