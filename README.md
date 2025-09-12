@@ -27,7 +27,7 @@ FortDB — Fully Versioned, Thread-Safe, Hierarchical NoSQL Database
 
 3. **Key Features**
 
-* **Append-only writes**: SET/DELETE always append; no in-place updates, ensuring crash safety.
+* **Append-only writes**: SET/DELETE always append; no in-place updates.
 * **Hierarchical versioning**: VersionNode chains at every level.
 * **Local versions**: `uint64_t` counters track per-entity changes.
 * **Time-travel reads**: Query any historical state with `--v` flag.
