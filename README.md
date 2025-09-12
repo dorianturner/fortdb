@@ -1,4 +1,4 @@
-FortDB — Fully Versioned, Crash‑Proof, Hierarchical NoSQL Database
+FortDB — Fully Versioned, Thread-Safe, Hierarchical NoSQL Database
 **Interactive Shell Usage**
 
 1. **Start FortDB**
