@@ -63,3 +63,8 @@ fortdb> exit
 
 Type `help` at the prompt for command summaries.
 
+6. **Future Plans**
+
+* Provie a live server cli for concurrent read's and writes
+* Have every write operation atomically write the database to a new file and delete old one for crash safety
+
