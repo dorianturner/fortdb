@@ -21,6 +21,42 @@
 
 #define DEFAULT_BUCKET_COUNT 16
 
+/* Topology changes are serialized so cycle checks and link installation are
+ * one operation. Value updates do not need this global lock. */
+static pthread_mutex_t topology_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static int document_reaches(Document current, Document target,
+                            Document **seen, size_t *seen_count,
+                            size_t *seen_capacity) {
+    if (!current || current == target) return 1;
+    for (size_t i = 0; i < *seen_count; i++) {
+        if ((*seen)[i] == current) return 0;
+    }
+    if (*seen_count == *seen_capacity) {
+        size_t next_capacity = *seen_capacity ? *seen_capacity * 2 : 16;
+        Document *next = realloc(*seen, next_capacity * sizeof(*next));
+        if (!next) return 1; /* fail closed: do not create an unchecked link */
+        *seen = next;
+        *seen_capacity = next_capacity;
+    }
+    (*seen)[(*seen_count)++] = current;
+
+    if (pthread_rwlock_rdlock(&current->lock) != 0) return 1;
+    for (uint64_t i = 0; i < current->subdocuments->bucket_count; i++) {
+        for (Entry e = current->subdocuments->buckets[i]; e; e = e->next) {
+            VersionNode head = (VersionNode)e->value;
+            Document child = head ? (Document)head->value : NULL;
+            if (child && document_reaches(child, target, seen, seen_count,
+                                           seen_capacity)) {
+                pthread_rwlock_unlock(&current->lock);
+                return 1;
+            }
+        }
+    }
+    pthread_rwlock_unlock(&current->lock);
+    return 0;
+}
+
 // Memory management
 Document document_create(void) {
     Document doc = malloc(sizeof(struct Document));
@@ -31,8 +67,16 @@ Document document_create(void) {
         return NULL;
     }
 
+    if (pthread_mutex_init(&doc->lifecycle_lock, NULL) != 0) {
+        pthread_rwlock_destroy(&doc->lock);
+        free(doc);
+        return NULL;
+    }
+    doc->references = 1;
+
     doc->fields = hashmap_create(DEFAULT_BUCKET_COUNT);
     if (!doc->fields) {
+        pthread_mutex_destroy(&doc->lifecycle_lock);
         pthread_rwlock_destroy(&doc->lock);
         free(doc);
         return NULL;
@@ -41,6 +85,7 @@ Document document_create(void) {
     doc->subdocuments = hashmap_create(DEFAULT_BUCKET_COUNT);
     if (!doc->subdocuments) {
         hashmap_free(doc->fields);
+        pthread_mutex_destroy(&doc->lifecycle_lock);
         pthread_rwlock_destroy(&doc->lock);
         free(doc);
         return NULL;
@@ -49,11 +94,37 @@ Document document_create(void) {
     return doc;
 }
 
+Document document_retain(Document doc) {
+    if (!doc) return NULL;
+    if (pthread_mutex_lock(&doc->lifecycle_lock) != 0) return NULL;
+    if (doc->references == 0) {
+        pthread_mutex_unlock(&doc->lifecycle_lock);
+        return NULL;
+    }
+    doc->references++;
+    pthread_mutex_unlock(&doc->lifecycle_lock);
+    return doc;
+}
+
 void document_free(Document doc) {
     if (!doc) return;
+
+    if (pthread_mutex_lock(&doc->lifecycle_lock) != 0) return;
+    if (doc->references == 0) {
+        pthread_mutex_unlock(&doc->lifecycle_lock);
+        return;
+    }
+    doc->references--;
+    if (doc->references != 0) {
+        pthread_mutex_unlock(&doc->lifecycle_lock);
+        return;
+    }
+    pthread_mutex_unlock(&doc->lifecycle_lock);
+
     hashmap_free(doc->fields);       
     hashmap_free(doc->subdocuments); 
     pthread_rwlock_destroy(&doc->lock);
+    pthread_mutex_destroy(&doc->lifecycle_lock);
     free(doc);
 }
 
@@ -74,16 +145,20 @@ int resolve_parent_and_key(Document root,
     char *token = strtok_r(tmp, "/", &saveptr);
     if (!token) { free(tmp); return -1; }
 
-    Document current = root;
+    Document current = document_retain(root);
+    if (!current) { free(tmp); return -1; }
     char *next = NULL;
     while (1) {
         next = strtok_r(NULL, "/", &saveptr);
         if (next == NULL) {
             /* token is the final component */
-            *out_parent = current;
             *out_key = strdup(token);
             free(tmp);
-            if (!*out_key) return -1;
+            if (!*out_key) {
+                document_free(current);
+                return -1;
+            }
+            *out_parent = current;
             return 0;
         }
 
@@ -91,18 +166,31 @@ int resolve_parent_and_key(Document root,
         Document child = document_get_subdocument(current, token, 0);
         if (!child && create_missing) {
             child = document_create();
-            if (!child) { free(tmp); return -1; }
+            if (!child) { document_free(current); free(tmp); return -1; }
             if (document_set_subdocument(current, token, child, global_version) != 0) {
                 document_free(child);
+                document_free(current);
+                free(tmp);
+                return -1;
+            }
+            /* The map now owns its retained reference; release the creator's
+             * reference before keeping the traversal pin below. */
+            document_free(child);
+            /* The version chain now owns the created document. Keep this
+             * traversal reference as a separate pin. */
+            if (!document_retain(child)) {
+                document_free(current);
                 free(tmp);
                 return -1;
             }
         }
         if (!child) {
             /* missing and not creating */
+            document_free(current);
             free(tmp);
             return -1;
         }
+        document_free(current);
         current = child;
         token = next;
     }
@@ -122,6 +210,7 @@ char *document_get_field(Document doc, const char *key_or_path, uint64_t local_v
     if (!parent) { free(final_key); return NULL; }
 
     if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        document_free(parent);
         free(final_key);
         return NULL;
     }
@@ -129,19 +218,26 @@ char *document_get_field(Document doc, const char *key_or_path, uint64_t local_v
     if (local_version == UINT64_MAX) {
         Entry e = hashmap_find_entry(parent->fields, final_key);
         char *val = NULL;
+        char *copy = NULL;
         if (e) {
             VersionNode head = (VersionNode)e->value;
             val = head ? (char *)head->value : NULL;
         }
+        if (val && val != DELETED) copy = strdup(val);
         pthread_rwlock_unlock(&parent->lock);
+        document_free(parent);
         free(final_key);
-        return val;
+        if (!val || val == DELETED) return val;
+        return copy;
     }
 
     char *val = (char *)hashmap_get(parent->fields, final_key, local_version);
+    char *copy = (val && val != DELETED) ? strdup(val) : NULL;
     pthread_rwlock_unlock(&parent->lock);
+    document_free(parent);
     free(final_key);
-    return val;
+    if (!val || val == DELETED) return val;
+    return copy;
 }
 
 
@@ -178,9 +274,14 @@ int document_set_field_path(Document root, const char *path, const char *value, 
     if (resolve_parent_and_key(root, path, &parent, &final_key, 1, global_version) != 0) {
         return -1;
     }
-    if (!parent || !final_key) { free(final_key); return -1; }
+    if (!parent || !final_key) {
+        document_free(parent);
+        free(final_key);
+        return -1;
+    }
 
     int rc = document_set_field(parent, final_key, value, global_version);
+    document_free(parent);
     free(final_key);
     return rc;
 }
@@ -188,16 +289,39 @@ int document_set_field_path(Document root, const char *path, const char *value, 
 Document document_get_subdocument(Document doc, const char *key, uint64_t local_version) {
     if (!doc || !key) return NULL;
     if (pthread_rwlock_rdlock(&doc->lock) != 0) return NULL;
-    Document subdoc = (Document)hashmap_get(doc->subdocuments, key, local_version);
+    Document subdoc = (Document)hashmap_get_version(doc->subdocuments, key, local_version);
+    if (subdoc == (Document)DELETED) subdoc = NULL;
+    if (subdoc) subdoc = document_retain(subdoc);
     pthread_rwlock_unlock(&doc->lock);
     return subdoc;
 }
 
 int document_set_subdocument(Document doc, const char *key, Document subdoc, uint64_t global_version) {
-    if (!doc || !key || !subdoc) return -1;
-    if (pthread_rwlock_wrlock(&doc->lock) != 0) return -1;
-    int rc = hashmap_put(doc->subdocuments, key, subdoc, global_version, (void (*)(void *))document_free);
+    if (!doc || !key || !subdoc || doc == subdoc) return -1;
+    if (pthread_mutex_lock(&topology_lock) != 0) return -1;
+    Document *seen = NULL;
+    size_t seen_count = 0, seen_capacity = 0;
+    int creates_cycle = document_reaches(subdoc, doc, &seen, &seen_count,
+                                         &seen_capacity);
+    free(seen);
+    if (creates_cycle) {
+        pthread_mutex_unlock(&topology_lock);
+        return -1;
+    }
+    Document owned = document_retain(subdoc);
+    if (!owned) {
+        pthread_mutex_unlock(&topology_lock);
+        return -1;
+    }
+    if (pthread_rwlock_wrlock(&doc->lock) != 0) {
+        document_free(owned);
+        pthread_mutex_unlock(&topology_lock);
+        return -1;
+    }
+    int rc = hashmap_put(doc->subdocuments, key, owned, global_version, (void (*)(void *))document_free);
     pthread_rwlock_unlock(&doc->lock);
+    if (rc != 0) document_free(owned);
+    pthread_mutex_unlock(&topology_lock);
     return rc;
 }
 
@@ -210,9 +334,14 @@ int document_delete_path(Document doc, const char *path, uint64_t global_version
     if (resolve_parent_and_key(doc, path, &parent, &final_key, 0, 0) != 0) {
         return 0;
     }
-    if (!parent || !final_key) { free(final_key); return -1; }
+    if (!parent || !final_key) {
+        document_free(parent);
+        free(final_key);
+        return -1;
+    }
 
     if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        document_free(parent);
         free(final_key);
         return -1;
     }
@@ -220,17 +349,20 @@ int document_delete_path(Document doc, const char *path, uint64_t global_version
     pthread_rwlock_unlock(&parent->lock);
 
     if (!e) {
+        document_free(parent);
         free(final_key);
         return 0;
     }
 
     if (pthread_rwlock_wrlock(&parent->lock) != 0) {
+        document_free(parent);
         free(final_key);
         return -1;
     }
 
     int rc = hashmap_put(parent->fields, final_key, DELETED, global_version, NULL);
     pthread_rwlock_unlock(&parent->lock);
+    document_free(parent);
     free(final_key);
     return rc;
 }
@@ -256,6 +388,7 @@ int document_list_versions(Document doc, const char *path) {
     if (!parent) { free(final_key); return -1; }
 
     if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        document_free(parent);
         free(final_key);
         return -1;
     }
@@ -263,6 +396,7 @@ int document_list_versions(Document doc, const char *path) {
     Entry e = hashmap_find_entry(parent->fields, final_key);
     if (!e) {
         pthread_rwlock_unlock(&parent->lock);
+        document_free(parent);
         fprintf(stderr, "document_list_versions: field not found: %s\n", path);
         free(final_key);
         return -1;
@@ -282,6 +416,7 @@ int document_list_versions(Document doc, const char *path) {
         curr = curr->prev;
     }
     pthread_rwlock_unlock(&parent->lock);
+    document_free(parent);
 
     free(final_key);
     return 0;
@@ -295,25 +430,40 @@ char *document_get_path(Document doc, const char *path, uint64_t local_version) 
     if (resolve_parent_and_key(doc, path, &parent, &final_key, 0, 0) != 0) return NULL;
     if (!parent) { free(final_key); return NULL; }
 
-    if (pthread_rwlock_rdlock(&parent->lock) != 0) { free(final_key); return NULL; }
+    if (pthread_rwlock_rdlock(&parent->lock) != 0) {
+        document_free(parent);
+        free(final_key);
+        return NULL;
+    }
 
     void *field_val = hashmap_get_version(parent->fields, final_key, local_version);
     if (field_val) {
+        char *copy = field_val == DELETED ? NULL : strdup((char *)field_val);
         pthread_rwlock_unlock(&parent->lock);
+        document_free(parent);
         free(final_key);
         if (field_val == DELETED) return (char*)1; /* deleted sentinel */
-        return (char *)field_val; /* internal pointer (same as before) */
+        return copy;
     }
 
     Document sub = (Document)hashmap_get_version(parent->subdocuments, final_key, local_version);
     if (!sub || sub == (Document)DELETED) {
         pthread_rwlock_unlock(&parent->lock);
+        document_free(parent);
         free(final_key);
         return NULL;
     }
 
+    if (!document_retain(sub)) {
+        pthread_rwlock_unlock(&parent->lock);
+        document_free(parent);
+        free(final_key);
+        return NULL;
+    }
     if (pthread_rwlock_rdlock(&sub->lock) != 0) {
         pthread_rwlock_unlock(&parent->lock);
+        document_free(sub);
+        document_free(parent);
         free(final_key);
         return NULL;
     }
@@ -331,6 +481,8 @@ char *document_get_path(Document doc, const char *path, uint64_t local_version) 
     free(subs);
 
     pthread_rwlock_unlock(&sub->lock);
+    document_free(sub);
+    document_free(parent);
     free(final_key);
     return out;
 }

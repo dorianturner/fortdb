@@ -29,7 +29,7 @@ Provide append‑only, versioned key–value storage inspired by Firestore’s N
      * Set `version = global_version`
      * Link `prev` to the entry’s existing node
   4. Update `entry->value` to new node.
-  5. Optionally call `free_value` on older data if pruning.
+  5. Older data remains reachable until compaction releases it.
   6. Increment `global_version` externally.
 * **hashmap\_get(map, key, local\_version)**
 
@@ -68,8 +68,9 @@ A root table stores collections
 Collections store Documents
 Documents store fields, and sub collections
 
-### 6. Caveats
+### 6. Concurrency and lifetime
 
-* **Memory Growth**: Chain length grows with each update—plan pruning strategy. Requires compaction to keep store size down.
-* **Thread Safety**: Requires external synchronization for concurrent access.
+* **Memory Growth**: Chain length grows with each update—plan pruning strategy. Compaction is the only operation that releases historical values.
+* **Thread Safety**: The `Document` API synchronizes map access, serialization, compaction, and returned document lifetimes. Direct `Hashmap` calls still require the caller to provide synchronization.
+* **Read ownership**: `document_get_field` returns a copy; `document_get_subdocument` returns a retained reference that must be released with `document_free`.
 * **Version Overflow**: Monitor counter wrap‑around in long‑lived systems.

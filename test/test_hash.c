@@ -13,7 +13,7 @@ int main(void) {
         return 2;
     }
 
-    /* First insert -> internal local_version == 0 */
+    /* First insert -> local_version 1; 0 means latest. */
     char *p1 = strdup("payload1");
     if (!p1) return 2;
     /* pass the payload, hashmap will create VersionNode internally */
@@ -22,11 +22,11 @@ int main(void) {
         return 2;
     }
 
-    /* fetch by local_version 0 (the head created for the first insert) */
+    /* Fetch the latest value after the first insert. */
     void *r = hashmap_get(map, "key", 0);
     assert(r == p1 && "Expected first get to return the stored payload (p1)");
 
-    /* Insert a newer version for the same key -> internal local_version == 1 */
+    /* Insert a newer version for the same key -> local_version 2. */
     char *p2 = strdup("payload2");
     if (!p2) return 2;
     if (hashmap_put(map, "key", p2, 2, free) != 0) {
@@ -34,13 +34,13 @@ int main(void) {
         return 2;
     }
 
-    /* Latest visible at local_version == 1 should be p2 */
-    void *r2 = hashmap_get(map, "key", 1);
-    assert(r2 == p2 && "Expected latest payload (p2) for local_version 1");
+    /* Version 2 is p2, while version 1 remains p1. */
+    void *r2 = hashmap_get(map, "key", 2);
+    assert(r2 == p2 && "Expected payload (p2) for local_version 2");
 
-    /* A snapshot at local_version 0 should still see p1 */
-    void *r1snap = hashmap_get(map, "key", 0);
-    assert(r1snap == p1 && "Expected older payload (p1) for local_version 0");
+    /* An exact snapshot at local_version 1 still sees p1. */
+    void *r1snap = hashmap_get(map, "key", 1);
+    assert(r1snap == p1 && "Expected older payload (p1) for local_version 1");
 
     /* Collision test: different key should not interfere when bucket_count==1 */
     char *p3 = strdup("other");
@@ -58,4 +58,3 @@ int main(void) {
     printf("All hashmap tests passed.\n");
     return 0;
 }
-

@@ -5,6 +5,8 @@ static void print_indent(int level) {
     for (int i = 0; i < level; i++) printf("  ");
 }
 
+static void print_document(Document doc, int indent);
+
 static void print_version_chain(VersionNode v) {
     for (VersionNode node = v; node; node = node->prev) {
         if (!node) continue;
@@ -19,7 +21,7 @@ static void print_version_chain(VersionNode v) {
     }
 }
 
-static void print_document(Document doc, int indent) {
+static void print_document_locked(Document doc, int indent) {
     if (!doc) return;
 
     print_indent(indent);
@@ -49,11 +51,19 @@ static void print_document(Document doc, int indent) {
     }
 }
 
+static void print_document(Document doc, int indent) {
+    if (!doc || pthread_rwlock_rdlock(&doc->lock) != 0) return;
+    print_document_locked(doc, indent);
+    pthread_rwlock_unlock(&doc->lock);
+}
+
 void visualize_db(VersionNode root) {
+    if (!root || pthread_rwlock_rdlock(&root->lock) != 0) return;
     printf("Database:\n");
     for (VersionNode v = root; v; v = v->prev) {
         Document doc = (Document)v->value;
         print_document(doc, 1);
         printf("------\n");
     }
+    pthread_rwlock_unlock(&root->lock);
 }

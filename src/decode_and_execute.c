@@ -10,7 +10,7 @@
 #include "./storage/deserializer.h"
 #include "./storage/serializer.h"
 #include "./utils/visualiser.h"
-int decode_and_execute(VersionNode v_root, Instr instr) {
+static int decode_and_execute_locked(VersionNode v_root, Instr instr) {
     if (!instr) return -1;
     int ret;
     Document root = v_root->value;
@@ -40,6 +40,7 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
             }
 
             printf("%s\n", val);
+            free(val);
             return 0;
         }
 
@@ -62,9 +63,7 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
 
         
         case COMPACT:
-            //root is a vnode
-            VersionNode node = find_version_node_by_path(v_root, instr->compact.path);
-            ret = version_node_compact(node);
+            ret = compactor_compact_path(v_root, instr->compact.path);
 
             if (ret != 0) {
                 fprintf(stderr, "version_node_compact: %d\n", ret);
@@ -82,7 +81,7 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
                 fprintf(stderr, "Error in document_compact: %d\n", ret);
                 return ret;
             }
-            printf("Compacted %s\n", instr->compact.path ? instr->compact.path : "");
+            printf("Compacted database\n");
             return 0;
 
         case LOAD: {
@@ -103,7 +102,7 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
             new_root->value = NULL; // prevent double-free
 
             // Free temporary VersionNode chain except the first node
-            version_node_free(new_root->prev);
+            version_node_free(new_root);
 
             printf("Successfully loaded database from '%s'\n", instr->load.path);
             return 0;
@@ -147,3 +146,21 @@ int decode_and_execute(VersionNode v_root, Instr instr) {
     }
 }
 
+int decode_and_execute(VersionNode v_root, Instr instr) {
+    if (!v_root || !instr) return -1;
+    int ret;
+    if (instr->instr_type == LOAD) {
+        if (pthread_rwlock_wrlock(&v_root->lock) != 0) return -1;
+        ret = decode_and_execute_locked(v_root, instr);
+        pthread_rwlock_unlock(&v_root->lock);
+        return ret;
+    }
+    if (instr->instr_type == COMPACT || instr->instr_type == COMPACT_DB ||
+        instr->instr_type == SAVE || instr->instr_type == DUMP) {
+        return decode_and_execute_locked(v_root, instr);
+    }
+    if (pthread_rwlock_rdlock(&v_root->lock) != 0) return -1;
+    ret = decode_and_execute_locked(v_root, instr);
+    pthread_rwlock_unlock(&v_root->lock);
+    return ret;
+}

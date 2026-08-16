@@ -11,6 +11,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 /*#if defined(_WIN32)
 #include <winsock2.h>
@@ -79,7 +82,7 @@ int serialize_version_node(VersionNode ver, FILE *file) {
 }
 
 /* Serialize a Document */
-int serialize_document(Document doc, FILE *file) {
+static int serialize_document_locked(Document doc, FILE *file) {
     if (!doc || !file) return -1;
 
     // 1. Fields
@@ -133,12 +136,45 @@ int serialize_document(Document doc, FILE *file) {
     return 0;
 }
 
+int serialize_document(Document doc, FILE *file) {
+    if (!doc || !file) return -1;
+    if (pthread_rwlock_rdlock(&doc->lock) != 0) return -1;
+    int ret = serialize_document_locked(doc, file);
+    pthread_rwlock_unlock(&doc->lock);
+    return ret;
+}
+
 /* Serialize DB root */
 int serialize_db(VersionNode root, const char *filename) {
-    if (!filename) return -1;
+    if (!root || !filename) return -1;
 
-    FILE *f = fopen(filename, "wb");
-    if (!f) return -1;
+    size_t temp_len = strlen(filename) + sizeof(".tmp.XXXXXX");
+    char *temp_name = malloc(temp_len);
+    if (!temp_name) return -1;
+    int n = snprintf(temp_name, temp_len, "%s.tmp.XXXXXX", filename);
+    if (n < 0 || (size_t)n >= temp_len) {
+        free(temp_name);
+        return -1;
+    }
+    int fd = mkstemp(temp_name);
+    if (fd < 0) {
+        free(temp_name);
+        return -1;
+    }
+    FILE *f = fdopen(fd, "wb");
+    if (!f) {
+        close(fd);
+        unlink(temp_name);
+        free(temp_name);
+        return -1;
+    }
+
+    if (pthread_rwlock_rdlock(&root->lock) != 0) {
+        fclose(f);
+        unlink(temp_name);
+        free(temp_name);
+        return -1;
+    }
 
     // Magic
     if (fwrite(MAGIC, 1, 4, f) != 4) goto fail;
@@ -161,10 +197,52 @@ int serialize_db(VersionNode root, const char *filename) {
         if (serialize_version_node(v, f) != 0) goto fail;
     }
 
-    fclose(f);
+    if (fflush(f) != 0 || fsync(fileno(f)) != 0) goto fail;
+    if (fclose(f) != 0) {
+        f = NULL;
+        goto fail;
+    }
+    f = NULL;
+    if (rename(temp_name, filename) != 0) goto fail_after_close;
+
+    /* A successful rename is atomic; syncing the directory makes the name
+     * replacement durable across a crash on POSIX filesystems. */
+    const char *slash = strrchr(filename, '/');
+    char *dir = NULL;
+    if (slash) {
+        size_t dir_len = (size_t)(slash - filename);
+        dir = malloc(dir_len + 1);
+        if (!dir) goto fail_after_rename;
+        memcpy(dir, filename, dir_len);
+        dir[dir_len] = '\0';
+    } else {
+        dir = strdup(".");
+        if (!dir) goto fail_after_rename;
+    }
+    int dir_fd = open(dir, O_RDONLY);
+    free(dir);
+    if (dir_fd < 0 || fsync(dir_fd) != 0) {
+        if (dir_fd >= 0) close(dir_fd);
+        free(temp_name);
+        pthread_rwlock_unlock(&root->lock);
+        return -1;
+    }
+    close(dir_fd);
+    free(temp_name);
+    pthread_rwlock_unlock(&root->lock);
     return 0;
 
 fail:
     if (f) fclose(f);
+    pthread_rwlock_unlock(&root->lock);
+    unlink(temp_name);
+    free(temp_name);
+    return -1;
+
+fail_after_close:
+    unlink(temp_name);
+fail_after_rename:
+    free(temp_name);
+    pthread_rwlock_unlock(&root->lock);
     return -1;
 }

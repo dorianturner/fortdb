@@ -80,7 +80,8 @@ static int hashmap_rehash(Hashmap map, uint64_t new_bucket_count) {
 
 int hashmap_put(Hashmap map, const char *key, void *value,
                 uint64_t global_version, void (free_value)(void *)) {
-    if (!map || !key || !value) return -1;
+    /* DELETED is a deliberate non-NULL sentinel whose address is 1. */
+    if (!map || !key || (!value && value != DELETED)) return -1;
 
     /* Grow if load factor exceeded */
     if ((double)(map->size + 1) / (double)map->bucket_count > LOAD_FACTOR) {

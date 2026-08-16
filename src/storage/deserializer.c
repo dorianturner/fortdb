@@ -69,6 +69,7 @@ int deserialize_db(const char *filename, VersionNode *root_out) {
 
 fail:
     if (f) fclose(f);
+    version_node_free(head);
     *root_out = NULL;
     return -1;
 }
@@ -93,6 +94,7 @@ int deserialize_version_node(VersionNode *ver_out, FILE *file) {
         case 1: { // string
             uint64_t len;
             if (read_be64(file, &len) != 0) return -1;
+            if (len == UINT64_MAX || len > SIZE_MAX - 1) return -1;
             char *str = malloc(len + 1);
             if (!str) return -1;
             if (len && fread(str, 1, len, file) != len) { free(str); return -1; }
@@ -134,6 +136,7 @@ int deserialize_document(Document *doc_out, FILE *file) {
     for (uint64_t i = 0; i < count; i++) {
         uint64_t key_len;
         if (read_be64(file, &key_len) != 0) goto fail;
+        if (key_len == UINT64_MAX || key_len > SIZE_MAX - 1) goto fail;
         char *key = malloc(key_len + 1);
         if (!key) goto fail;
         if (key_len && fread(key, 1, key_len, file) != key_len) { free(key); goto fail; }
@@ -145,13 +148,22 @@ int deserialize_document(Document *doc_out, FILE *file) {
         VersionNode head = NULL, tail = NULL;
         for (uint64_t v = 0; v < ver_count; v++) {
             VersionNode ver = NULL;
-            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            if (deserialize_version_node(&ver, file) != 0) {
+                free(key);
+                version_node_free(head);
+                goto fail;
+            }
             ver->prev = NULL;
             if (!head) head = tail = ver;
             else { tail->prev = ver; tail = ver; }
         }
 
-        if (hashmap_set_raw((*doc_out)->fields, key, head) != 0) { free(key); goto fail; }
+        if (hashmap_set_raw((*doc_out)->fields, key, head) != 0) {
+            free(key);
+            version_node_free(head);
+            goto fail;
+        }
+        head = NULL;
         free(key);
     }
 
@@ -160,6 +172,7 @@ int deserialize_document(Document *doc_out, FILE *file) {
     for (uint64_t i = 0; i < count; i++) {
         uint64_t key_len;
         if (read_be64(file, &key_len) != 0) goto fail;
+        if (key_len == UINT64_MAX || key_len > SIZE_MAX - 1) goto fail;
         char *key = malloc(key_len + 1);
         if (!key) goto fail;
         if (key_len && fread(key, 1, key_len, file) != key_len) { free(key); goto fail; }
@@ -171,13 +184,22 @@ int deserialize_document(Document *doc_out, FILE *file) {
         VersionNode head = NULL, tail = NULL;
         for (uint64_t v = 0; v < ver_count; v++) {
             VersionNode ver = NULL;
-            if (deserialize_version_node(&ver, file) != 0) { free(key); goto fail; }
+            if (deserialize_version_node(&ver, file) != 0) {
+                free(key);
+                version_node_free(head);
+                goto fail;
+            }
             ver->prev = NULL;
             if (!head) head = tail = ver;
             else { tail->prev = ver; tail = ver; }
         }
 
-        if (hashmap_set_raw((*doc_out)->subdocuments, key, head) != 0) { free(key); goto fail; }
+        if (hashmap_set_raw((*doc_out)->subdocuments, key, head) != 0) {
+            free(key);
+            version_node_free(head);
+            goto fail;
+        }
+        head = NULL;
         free(key);
     }
 

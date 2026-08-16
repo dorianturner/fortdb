@@ -5,12 +5,13 @@ LDFLAGS := -pthread
 
 BIN_DIR := compiled
 
-.PHONY: test_compactor test_roundtrip test_serialize test_deserialize
+.PHONY: test_compactor test_roundtrip test_serialize test_deserialize test_thread_safety
 
 test_compactor: $(BIN_DIR)/test_compactor
 test_roundtrip: $(BIN_DIR)/test_roundtrip
 test_serialize: $(BIN_DIR)/test_serialize
 test_deserialize: $(BIN_DIR)/test_deserialize
+test_thread_safety: $(BIN_DIR)/test_thread_safety
 
 # Common utility sources used by most tests
 COMMON_SRCS := ../src/utils/hash.c ../src/utils/version_node.c ../src/utils/document.c
@@ -23,7 +24,7 @@ STORAGE_COMPACTOR  := ../src/storage/compactor.c
 TEST_SRCS := $(wildcard test_*.c)
 TEST_BINS := $(patsubst %.c,$(BIN_DIR)/%,$(TEST_SRCS))
 
-.PHONY: all clean $(TEST_BINS)
+.PHONY: all clean
 
 all: $(BIN_DIR) $(TEST_BINS)
 
@@ -58,9 +59,11 @@ $(BIN_DIR)/test_deserialize: test_deserialize.c $(COMMON_SRCS) $(STORAGE_SERIALI
 $(BIN_DIR)/test_compactor: test_compactor.c $(COMMON_SRCS) $(STORAGE_COMPACTOR) | $(BIN_DIR)
 	$(CC) $(CFLAGS) $< $(COMMON_SRCS) $(STORAGE_COMPACTOR) $(LDFLAGS) -o $@
 
+$(BIN_DIR)/test_thread_safety: test_thread_safety.c $(COMMON_SRCS) $(STORAGE_SERIALIZER) $(STORAGE_COMPACTOR) | $(BIN_DIR)
+	$(CC) $(CFLAGS) $< $(COMMON_SRCS) $(STORAGE_SERIALIZER) $(STORAGE_COMPACTOR) $(LDFLAGS) -o $@
+
 #
 # Clean
 #
 clean:
 	rm -rf $(BIN_DIR)/*
-

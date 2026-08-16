@@ -17,22 +17,29 @@ typedef struct Document *Document;
 
 struct Document {
     pthread_rwlock_t lock;
+    pthread_mutex_t lifecycle_lock;
+    size_t references;
     Hashmap fields;          // char* → Entry(VersionNode(char*))
     Hashmap subdocuments;    // char* → Entry(VersionNode(Document))
 };
 
 // Memory management
 Document document_create(void);
+Document document_retain(Document doc);
+/* Releases one ownership/reference count held for doc. */
 void document_free(Document doc);
 
 // Field getters/setters 
 // For convenience, we only set strings as our values
+/* Returned strings are caller-owned. DELETED is returned as a sentinel. */
 char *document_get_field(Document doc, const char *key, uint64_t local_version);
 int document_set_field(Document doc, const char *key, const char *value, uint64_t global_version);
 int document_set_field_cstr(Document doc, const char *key, const char *value, uint64_t global_version);
 int document_set_field_path(Document root, const char *path, const char *value, uint64_t global_version);
 
 // Subdocument getters/setters
+/* The returned document is retained; release it with document_free().
+ * set_subdocument retains its argument; callers retain their own reference. */
 Document document_get_subdocument(Document doc, const char *key, uint64_t local_version);
 int document_set_subdocument(Document doc, const char *key, Document subdoc, uint64_t global_version);
 
@@ -54,4 +61,3 @@ int resolve_parent_and_key(Document root,
                                   int create_missing,
                                   uint64_t global_version);
 #endif
-

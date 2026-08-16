@@ -10,3 +10,7 @@
 
 /test/test_hash
 /test/test_version_node
+
+# Local knowledge-graph artifacts
+graphify-out/
+.graphify_*

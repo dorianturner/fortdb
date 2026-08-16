@@ -31,8 +31,9 @@ FortDB — Fully Versioned, Thread-Safe, Hierarchical NoSQL Database
 * **Hierarchical versioning**: VersionNode chains at every level.
 * **Local versions**: `uint64_t` counters track per-entity changes.
 * **Time-travel reads**: Query any historical state with `--v` flag.
-* **Atomic compaction**: Background process compacts data and swaps files atomically.
-* **Thread-safe**: RW-locks on structures and global mutex for version counter.
+* **Atomic persistence**: `save` serializes a locked snapshot to a same-directory temporary file, flushes it, and renames it into place.
+* **Thread-safe**: Document reads, writes, serialization, compaction, and document lifetime pins are synchronized with read/write locks and reference counts.
+* **Immutable history**: Existing payloads and version nodes are never edited by writes; only compaction detaches and releases older chains.
 
 4. **Example Session**
 
@@ -65,6 +66,4 @@ Type `help` at the prompt for command summaries.
 
 6. **Future Plans**
 
-* Provide a live server cli for concurrent read's and writes from multiple users
-* Have every write operation atomically write the database to a new file and delete old one for added crash safety
-
+* Provide a live server CLI for concurrent reads and writes from multiple users
